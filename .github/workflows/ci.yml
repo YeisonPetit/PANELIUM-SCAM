@@ -14,9 +14,9 @@ jobs:
       postgres:
         image: postgres:15-alpine
         env:
-          POSTGRES_USER: inkverse
+          POSTGRES_USER: panelium
           POSTGRES_PASSWORD: password123
-          POSTGRES_DB: inkverse_test
+          POSTGRES_DB: panelium_test
         ports:
           - 5432:5432
         options: >-
@@ -40,18 +40,10 @@ jobs:
     - name: Generate Prisma Client
       run: npm run generate -w apps/api
       env:
-        DATABASE_URL: postgresql://inkverse:password123@localhost:5432/inkverse_test
+        DATABASE_URL: postgresql://panelium:password123@localhost:5432/panelium_test
         
-    - name: Lint
+    - name: Typecheck / Lint
       run: npm run lint
       
     - name: Build
       run: npm run build
-
-  # deploy:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   if: github.ref == 'refs/heads/main'
-  #   steps:
-  #     - name: Deploy Placeholder
-  #       run: echo "Deployment job placeholder"
