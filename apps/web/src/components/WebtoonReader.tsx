@@ -220,6 +220,7 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
               src={page.imageUrl}
               alt={`Page ${page.pageNumber}`}
               loading="lazy"
+              referrerPolicy="no-referrer"
               className="w-full h-auto object-contain block mx-auto"
               onError={(e) => {
                 const img = e.target as HTMLImageElement;

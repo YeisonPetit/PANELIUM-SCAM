@@ -982,12 +982,16 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
     }
 
     if (!res.headersSent) {
-      console.error(`Proxy image all strategies failed for: ${targetUrl}`);
-      return res.status(502).send('Failed to fetch image from provider');
+      // Fallback: Redirect directly to target URL so browser loads it seamlessly
+      return res.redirect(302, targetUrl);
     }
   } catch (error) {
     console.error('Proxy image error:', error);
     if (!res.headersSent) {
+      const { url } = req.query;
+      if (typeof url === 'string') {
+        return res.redirect(302, url);
+      }
       res.status(500).send('Internal Server Error');
     }
   }
