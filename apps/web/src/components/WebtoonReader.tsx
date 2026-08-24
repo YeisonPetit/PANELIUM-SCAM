@@ -222,8 +222,16 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
               loading="lazy"
               className="w-full h-auto object-contain block mx-auto"
               onError={(e) => {
-                // On image error, hide the broken image indicator
-                (e.target as HTMLImageElement).style.display = 'none';
+                const img = e.target as HTMLImageElement;
+                const retries = parseInt(img.dataset.retries || '0', 10);
+                if (retries < 3) {
+                  img.dataset.retries = String(retries + 1);
+                  setTimeout(() => {
+                    img.src = `${page.imageUrl}&_retry=${Date.now()}`;
+                  }, 1500 * (retries + 1));
+                } else {
+                  img.style.opacity = '0.3';
+                }
               }}
             />
             <span className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-md text-[10px] text-gray-300 font-mono px-2 py-0.5 rounded border border-white/10">

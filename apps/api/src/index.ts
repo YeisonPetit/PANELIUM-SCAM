@@ -847,7 +847,10 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
       return res.status(400).send('Invalid URL format');
     }
 
-    const refString = typeof referer === 'string' && referer.trim() ? referer.trim() : '';
+    let refString = typeof referer === 'string' && referer.trim() ? referer.trim() : '';
+    if (refString && !refString.endsWith('/')) {
+      refString += '/';
+    }
 
     // Multiple header strategies to bypass anti-hotlinking without triggering 403 CORS/Origin blocks
     const strategies: Record<string, string>[] = [
@@ -889,17 +892,21 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
     let imageRes: any = null;
 
     for (const headers of strategies) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
       try {
         const resp = await fetch(targetUrl, {
           headers,
           redirect: 'follow',
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
         if (resp.ok) {
           imageRes = resp;
           break;
         }
       } catch {
-        // try next strategy
+        clearTimeout(timeoutId);
       }
     }
 
@@ -910,14 +917,22 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
 
     const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
     res.setHeader('Access-Control-Allow-Origin', '*');
 
-    const arrayBuffer = await imageRes.arrayBuffer();
-    return res.end(Buffer.from(arrayBuffer));
+    if (imageRes.body) {
+      const { Readable } = await import('stream');
+      const nodeStream = Readable.fromWeb(imageRes.body as any);
+      nodeStream.pipe(res);
+    } else {
+      const arrayBuffer = await imageRes.arrayBuffer();
+      res.end(Buffer.from(arrayBuffer));
+    }
   } catch (error) {
     console.error('Proxy image error:', error);
-    return res.status(500).send('Internal Server Error');
+    if (!res.headersSent) {
+      res.status(500).send('Internal Server Error');
+    }
   }
 });
 
