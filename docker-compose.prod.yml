@@ -38,6 +38,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-panelium_super_secret_jwt_2026}
       - PORT=4000
+    ports:
+      - "5555:5555"
     depends_on:
       postgres:
         condition: service_healthy
