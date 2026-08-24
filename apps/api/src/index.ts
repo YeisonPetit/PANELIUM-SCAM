@@ -35,40 +35,13 @@ app.use(
 
 app.use(express.json({ limit: '1mb' }));
 
-// General Rate Limiter (lenient for webtoon readers)
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 50000,
-  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => {
-    // Never rate-limit health, image proxies, or chapter reading
-    return (
-      req.path === '/health' ||
-      req.path === '/sitemap.xml' ||
-      req.path.includes('/proxy-image') ||
-      req.path.includes('/chapters/')
-    );
-  },
-});
-
-// Strict Rate Limiter for Import Actions (100 per 15 min per IP)
+// Strict Rate Limiter for Import Actions only (100 per 15 min per IP)
+// Reading, browsing, and image proxying are NOT rate-limited
 const importLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: { error: 'Import rate limit exceeded. Please wait 15 minutes.' },
 });
-
-// Image Proxy Limiter
-const proxyLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000,
-  max: 100000,
-  message: { error: 'Proxy rate limit exceeded.' },
-  skip: () => true, // unthrottled for smooth reading
-});
-
-app.use('/api/', apiLimiter);
 
 
 // SSRF Safety Check for Image Proxy
@@ -855,7 +828,7 @@ app.post('/api/manganato/import', requireAdmin, importLimiter, async (req: Reque
 });
 
 // GET /api/proxy-image - Proxy image requests to bypass referer blocks securely
-app.get('/api/proxy-image', proxyLimiter, async (req: Request, res: Response) => {
+app.get('/api/proxy-image', async (req: Request, res: Response) => {
   try {
     const { url, referer } = req.query;
     if (!url || typeof url !== 'string') {
