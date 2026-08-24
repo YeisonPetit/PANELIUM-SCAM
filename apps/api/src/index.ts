@@ -827,6 +827,69 @@ app.post('/api/manganato/import', requireAdmin, importLimiter, async (req: Reque
   }
 });
 
+import http from 'http';
+import https from 'https';
+
+const proxyHttpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: 300,
+  maxFreeSockets: 50,
+  timeout: 20000,
+});
+
+const proxyHttpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: 300,
+  maxFreeSockets: 50,
+  timeout: 20000,
+});
+
+function fetchImageWithNode(
+  targetUrl: string,
+  headers: Record<string, string>,
+  maxRedirects = 3
+): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; stream: http.IncomingMessage }> {
+  return new Promise((resolve, reject) => {
+    try {
+      const isHttps = targetUrl.startsWith('https:');
+      const client = isHttps ? https : http;
+      const agent = isHttps ? proxyHttpsAgent : proxyHttpAgent;
+
+      const req = client.get(
+        targetUrl,
+        {
+          agent,
+          headers,
+          timeout: 15000,
+        },
+        (res) => {
+          if (
+            (res.statusCode === 301 ||
+              res.statusCode === 302 ||
+              res.statusCode === 307 ||
+              res.statusCode === 308) &&
+            res.headers.location &&
+            maxRedirects > 0
+          ) {
+            res.resume();
+            const redirectUrl = new URL(res.headers.location, targetUrl).toString();
+            return resolve(fetchImageWithNode(redirectUrl, headers, maxRedirects - 1));
+          }
+          resolve({ statusCode: res.statusCode || 500, headers: res.headers, stream: res });
+        }
+      );
+
+      req.on('error', (err) => reject(err));
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
 // GET /api/proxy-image - Proxy image requests to bypass referer blocks securely
 app.get('/api/proxy-image', async (req: Request, res: Response) => {
   try {
@@ -852,7 +915,7 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
       refString += '/';
     }
 
-    // Multiple header strategies to bypass anti-hotlinking without triggering 403 CORS/Origin blocks
+    // Multiple header strategies
     const strategies: Record<string, string>[] = [
       // 1. Provided Referer
       ...(refString
@@ -881,7 +944,7 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
         Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
         Referer: `${parsedUrl.protocol}//${parsedUrl.host}/`,
       },
-      // 4. Clean request without referer (for MangaDex & permissive CDNs)
+      // 4. Clean request without referer
       {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -889,44 +952,28 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
       },
     ];
 
-    let imageRes: any = null;
-
     for (const headers of strategies) {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
       try {
-        const resp = await fetch(targetUrl, {
-          headers,
-          redirect: 'follow',
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        if (resp.ok) {
-          imageRes = resp;
-          break;
+        const result = await fetchImageWithNode(targetUrl, headers);
+        if (result.statusCode >= 200 && result.statusCode < 300) {
+          const contentType = (result.headers['content-type'] as string) || 'image/jpeg';
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+
+          result.stream.pipe(res);
+          return;
+        } else {
+          result.stream.resume();
         }
       } catch {
-        clearTimeout(timeoutId);
+        // try next strategy
       }
     }
 
-    if (!imageRes || !imageRes.ok) {
+    if (!res.headersSent) {
       console.error(`Proxy image all strategies failed for: ${targetUrl}`);
-      return res.status(imageRes ? imageRes.status : 502).send('Failed to fetch image from provider');
-    }
-
-    const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-
-    if (imageRes.body) {
-      const { Readable } = await import('stream');
-      const nodeStream = Readable.fromWeb(imageRes.body as any);
-      nodeStream.pipe(res);
-    } else {
-      const arrayBuffer = await imageRes.arrayBuffer();
-      res.end(Buffer.from(arrayBuffer));
+      return res.status(502).send('Failed to fetch image from provider');
     }
   } catch (error) {
     console.error('Proxy image error:', error);
