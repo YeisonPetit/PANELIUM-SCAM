@@ -851,15 +851,23 @@ function fetchImageWithNode(
 ): Promise<{ statusCode: number; headers: http.IncomingHttpHeaders; stream: http.IncomingMessage }> {
   return new Promise((resolve, reject) => {
     try {
-      const isHttps = targetUrl.startsWith('https:');
+      const parsed = new URL(targetUrl);
+      const isHttps = parsed.protocol === 'https:';
       const client = isHttps ? https : http;
       const agent = isHttps ? proxyHttpsAgent : proxyHttpAgent;
 
       const req = client.get(
-        targetUrl,
         {
+          protocol: parsed.protocol,
+          hostname: parsed.hostname,
+          port: parsed.port || (isHttps ? 443 : 80),
+          path: parsed.pathname + parsed.search,
+          headers: {
+            ...headers,
+            Host: parsed.hostname,
+          },
+          servername: parsed.hostname,
           agent,
-          headers,
           timeout: 15000,
         },
         (res) => {
