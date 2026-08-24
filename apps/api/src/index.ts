@@ -839,70 +839,85 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
       return res.status(400).send('Invalid or restricted target URL');
     }
 
-    // Determine the base origin from referer or the image URL itself
-    let origin = '';
-    let ref = '';
+    const targetUrl = url.trim();
+    let parsedUrl: URL;
     try {
-      if (referer && typeof referer === 'string') {
-        ref = referer;
-        const refUrl = new URL(referer);
-        origin = refUrl.origin;
-      } else {
-        const imgUrl = new URL(url);
-        origin = imgUrl.origin;
-        ref = imgUrl.origin + '/';
-      }
+      parsedUrl = new URL(targetUrl);
     } catch {
-      const imgUrl = new URL(url);
-      origin = imgUrl.origin;
-      ref = origin + '/';
+      return res.status(400).send('Invalid URL format');
     }
 
-    const headers: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Referer': ref,
-      'Origin': origin,
-      'Sec-Fetch-Dest': 'image',
-      'Sec-Fetch-Mode': 'no-cors',
-      'Sec-Fetch-Site': 'cross-site',
-      'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache',
-    };
+    const refString = typeof referer === 'string' && referer.trim() ? referer.trim() : '';
 
-    const imageRes = await fetch(url, { headers });
+    // Multiple header strategies to bypass anti-hotlinking without triggering 403 CORS/Origin blocks
+    const strategies: Record<string, string>[] = [
+      // 1. Provided Referer
+      ...(refString
+        ? [
+            {
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9',
+              Referer: refString,
+            },
+          ]
+        : []),
+      // 2. WeebCentral referer
+      {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        Referer: 'https://weebcentral.com/',
+      },
+      // 3. Host domain referer
+      {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        Referer: `${parsedUrl.protocol}//${parsedUrl.host}/`,
+      },
+      // 4. Clean request without referer (for MangaDex & permissive CDNs)
+      {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      },
+    ];
 
-    if (!imageRes.ok) {
-      console.error(`Proxy image failed: ${imageRes.status} for ${url}`);
-      return res.status(imageRes.status).send('Failed to fetch image from source');
+    let imageRes: any = null;
+
+    for (const headers of strategies) {
+      try {
+        const resp = await fetch(targetUrl, {
+          headers,
+          redirect: 'follow',
+        });
+        if (resp.ok) {
+          imageRes = resp;
+          break;
+        }
+      } catch {
+        // try next strategy
+      }
     }
 
-    const contentType = imageRes.headers.get('content-type');
-    if (contentType) {
-      res.setHeader('Content-Type', contentType);
+    if (!imageRes || !imageRes.ok) {
+      console.error(`Proxy image all strategies failed for: ${targetUrl}`);
+      return res.status(imageRes ? imageRes.status : 502).send('Failed to fetch image from provider');
     }
 
-    // Cache for 24h in browser
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
     res.setHeader('Access-Control-Allow-Origin', '*');
 
-    // Stream response body
-    if (imageRes.body) {
-      const reader = imageRes.body.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
-      }
-      res.end();
-    } else {
-      res.status(500).send('No response body');
-    }
-
+    const arrayBuffer = await imageRes.arrayBuffer();
+    return res.end(Buffer.from(arrayBuffer));
   } catch (error) {
     console.error('Proxy image error:', error);
-    res.status(500).send('Internal Server Error');
+    return res.status(500).send('Internal Server Error');
   }
 });
 
