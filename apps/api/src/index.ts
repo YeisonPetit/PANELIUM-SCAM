@@ -835,6 +835,7 @@ const proxyHttpsAgent = new https.Agent({
   maxSockets: 300,
   maxFreeSockets: 50,
   timeout: 20000,
+  rejectUnauthorized: false,
 });
 
 const proxyHttpAgent = new http.Agent({
@@ -869,7 +870,8 @@ function fetchImageWithNode(
           servername: parsed.hostname,
           agent,
           timeout: 15000,
-        },
+          rejectUnauthorized: false,
+        } as any,
         (res) => {
           if (
             (res.statusCode === 301 ||
