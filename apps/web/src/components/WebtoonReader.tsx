@@ -100,13 +100,13 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <div className="glass p-8 rounded-3xl border border-rose-500/30 max-w-md">
           <span className="text-4xl mb-4 block">⚠️</span>
-          <h3 className="text-xl font-bold text-rose-400 mb-2">Error Loading Chapter</h3>
-          <p className="text-sm text-gray-300 mb-6">{error || 'Chapter not found'}</p>
+          <h3 className="text-xl font-bold text-rose-400 mb-2">Error al cargar el capítulo</h3>
+          <p className="text-sm text-gray-300 mb-6">{error || 'Capítulo no encontrado'}</p>
           <button
             onClick={() => window.history.back()}
             className="bg-accent text-white font-medium px-6 py-2.5 rounded-xl shadow-glow"
           >
-            Go Back
+            Volver
           </button>
         </div>
       </div>
@@ -120,27 +120,27 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
         <div className="glass p-8 rounded-3xl border border-yellow-500/30 max-w-md">
           <span className="text-4xl mb-4 block">📭</span>
           <h3 className="text-xl font-bold text-yellow-300 mb-2">
-            {chapter.title || `Chapter ${chapter.number}`}
+            {chapter.title || `Capítulo ${chapter.number}`}
           </h3>
           <p className="text-sm text-gray-300 mb-2">
-            This chapter has no readable pages.
+            Este capítulo no tiene páginas disponibles.
           </p>
           <p className="text-xs text-gray-500 mb-6">
-            It may be hosted externally (e.g., Webnovel, Webtoon) or not yet translated.
+            Puede que esté alojado externamente o aún no haya sido traducido.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <button
               onClick={() => onBackToSeries(chapter.series.slug)}
               className="bg-white/5 hover:bg-white/10 text-white font-semibold px-5 py-2.5 rounded-xl border border-white/10 text-sm"
             >
-              ← Back to Series
+              ← Volver a la serie
             </button>
             {chapter.nextChapterId && (
               <button
                 onClick={() => onNavigateChapter(chapter.nextChapterId!)}
                 className="bg-accent hover:bg-accent/80 text-white font-bold px-5 py-2.5 rounded-xl shadow-glow text-sm"
               >
-                Skip to Next Chapter →
+                Saltar al siguiente →
               </button>
             )}
           </div>
@@ -154,8 +154,8 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin mb-4 shadow-glow" />
-        <h3 className="text-xl font-bold text-white mb-1">Loading Pages from MangaDex...</h3>
-        <p className="text-sm text-gray-400">Fetching chapter images, please wait</p>
+        <h3 className="text-xl font-bold text-white mb-1">Cargando páginas...</h3>
+        <p className="text-sm text-gray-400">Obteniendo imágenes del capítulo, por favor espera</p>
       </div>
     );
   }
@@ -172,38 +172,38 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
             ← {chapter.series.title}
           </button>
 
-          <div className="text-center">
-            <h2 className="text-sm font-bold text-white line-clamp-1">
-              {chapter.title || `Chapter ${chapter.number}`}
+          <div className="text-center min-w-0 flex-1 px-2">
+            <h2 className="text-xs sm:text-sm font-bold text-white line-clamp-1">
+              {chapter.title || `Cap. ${chapter.number}`}
             </h2>
-            <span className="text-[10px] text-accent font-medium">
-              {chapter.pages.length} Pages • Continuous Vertical Scroll
+            <span className="text-[10px] text-accent font-medium hidden sm:block">
+              {chapter.pages.length} págs. • Lectura vertical
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               disabled={!chapter.prevChapterId}
               onClick={() => chapter.prevChapterId && onNavigateChapter(chapter.prevChapterId)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                 chapter.prevChapterId
                   ? 'bg-white/5 text-white hover:bg-accent border-white/10 hover:border-accent'
                   : 'opacity-30 border-white/5 cursor-not-allowed text-gray-500'
               }`}
             >
-              Prev
+              ‹ Ant.
             </button>
 
             <button
               disabled={!chapter.nextChapterId}
               onClick={() => chapter.nextChapterId && onNavigateChapter(chapter.nextChapterId)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                 chapter.nextChapterId
                   ? 'bg-accent text-white border-accent shadow-glow'
                   : 'opacity-30 border-white/5 cursor-not-allowed text-gray-500'
               }`}
             >
-              Next
+              Sig. ›
             </button>
           </div>
         </div>
@@ -227,7 +227,7 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
               }}
             />
             <span className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-md text-[10px] text-gray-300 font-mono px-2 py-0.5 rounded border border-white/10">
-              Page {page.pageNumber} / {chapter.pages.length}
+              {page.pageNumber} / {chapter.pages.length}
             </span>
           </div>
         ))}
@@ -236,19 +236,19 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
       {/* Bottom End-of-Chapter Navigation */}
       <footer className="w-full max-w-2xl my-12 px-6">
         <div className="glass p-8 rounded-3xl border border-white/10 text-center shadow-glow">
-          <h3 className="text-2xl font-bold text-white mb-2">
-            You finished {chapter.title || `Chapter ${chapter.number}`}! 🎉
+          <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
+            ¡Terminaste {chapter.title || `el Cap. ${chapter.number}`}! 🎉
           </h3>
           <p className="text-sm text-gray-400 mb-6">
-            Loved this chapter? Continue reading or explore the series catalog.
+            ¿Te gustó? Continúa leyendo o explora más series.
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-3">
             <button
               onClick={() => onBackToSeries(chapter.series.slug)}
-              className="bg-white/5 hover:bg-white/10 text-white font-semibold px-6 py-3 rounded-2xl border border-white/10 transition-all text-sm"
+              className="bg-white/5 hover:bg-white/10 text-white font-semibold px-5 py-2.5 rounded-2xl border border-white/10 transition-all text-sm"
             >
-              Series Overview
+              ← Ver la serie
             </button>
 
             {chapter.nextChapterId && (
@@ -256,9 +256,9 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => onNavigateChapter(chapter.nextChapterId!)}
-                className="bg-accent hover:bg-accent/80 text-white font-bold px-8 py-3 rounded-2xl shadow-glow transition-all text-sm flex items-center gap-2"
+                className="bg-accent hover:bg-accent/80 text-white font-bold px-6 py-2.5 rounded-2xl shadow-glow transition-all text-sm flex items-center gap-2"
               >
-                <span>Read Next Chapter</span>
+                <span>Siguiente capítulo</span>
                 <span>→</span>
               </motion.button>
             )}

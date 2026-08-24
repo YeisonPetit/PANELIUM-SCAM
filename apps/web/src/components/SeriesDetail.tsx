@@ -59,6 +59,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
 }) => {
   const [chapterSearch, setChapterSearch] = useState('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [descExpanded, setDescExpanded] = useState(false);
   const [isBookmarked, setIsBookmarked] = useState<boolean>(() => {
     try {
       if (!series) return false;
@@ -215,10 +216,22 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
               {series.title}
             </h1>
 
-            {/* Description */}
-            <p className="text-gray-300 text-sm sm:text-base leading-relaxed mb-6 font-medium max-w-3xl">
-              {series.description}
-            </p>
+            {/* Description with Ver más / Ver menos */}
+            <div className="mb-5">
+              <p className={`text-gray-300 text-sm sm:text-base leading-relaxed font-medium max-w-3xl ${
+                descExpanded ? '' : 'line-clamp-3'
+              }`}>
+                {series.description}
+              </p>
+              {series.description && series.description.length > 180 && (
+                <button
+                  onClick={() => setDescExpanded(!descExpanded)}
+                  className="mt-1 text-xs text-accent hover:text-rose-300 font-semibold transition-colors"
+                >
+                  {descExpanded ? '▲ Ver menos' : '▼ Ver más'}
+                </button>
+              )}
+            </div>
 
             {/* Genres List */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-6">
@@ -232,23 +245,23 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
               ))}
             </div>
 
-            {/* Metadata Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-2xl bg-white/[0.04] border border-white/10 mb-6 text-left">
+            {/* Metadata Bar - compact on mobile */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 p-3 sm:p-4 rounded-2xl bg-white/[0.04] border border-white/10 mb-5 text-left">
               <div>
-                <span className="text-gray-400 block text-xs font-medium uppercase tracking-wider mb-0.5">Autor</span>
-                <span className="text-white font-bold text-sm line-clamp-1">{series.author}</span>
+                <span className="text-gray-400 block text-[10px] font-medium uppercase tracking-wider mb-0.5">Autor</span>
+                <span className="text-white font-bold text-xs sm:text-sm line-clamp-1">{series.author}</span>
               </div>
               <div>
-                <span className="text-gray-400 block text-xs font-medium uppercase tracking-wider mb-0.5">Artista</span>
-                <span className="text-white font-bold text-sm line-clamp-1">{series.artist}</span>
+                <span className="text-gray-400 block text-[10px] font-medium uppercase tracking-wider mb-0.5">Artista</span>
+                <span className="text-white font-bold text-xs sm:text-sm line-clamp-1">{series.artist}</span>
               </div>
               <div>
-                <span className="text-gray-400 block text-xs font-medium uppercase tracking-wider mb-0.5">Año</span>
-                <span className="text-white font-bold text-sm">{series.releaseYear}</span>
+                <span className="text-gray-400 block text-[10px] font-medium uppercase tracking-wider mb-0.5">Año</span>
+                <span className="text-white font-bold text-xs sm:text-sm">{series.releaseYear}</span>
               </div>
               <div>
-                <span className="text-gray-400 block text-xs font-medium uppercase tracking-wider mb-0.5">Capítulos</span>
-                <span className="text-rose-400 font-black text-base">{series.chapters.length}</span>
+                <span className="text-gray-400 block text-[10px] font-medium uppercase tracking-wider mb-0.5">Capítulos</span>
+                <span className="text-rose-400 font-black text-sm sm:text-base">{series.chapters.length}</span>
               </div>
             </div>
 

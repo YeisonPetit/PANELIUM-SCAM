@@ -839,28 +839,55 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
       return res.status(400).send('Invalid or restricted target URL');
     }
 
-    const headers: Record<string, string> = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-    };
-    if (referer && typeof referer === 'string') {
-      headers['Referer'] = referer;
+    // Determine the base origin from referer or the image URL itself
+    let origin = '';
+    let ref = '';
+    try {
+      if (referer && typeof referer === 'string') {
+        ref = referer;
+        const refUrl = new URL(referer);
+        origin = refUrl.origin;
+      } else {
+        const imgUrl = new URL(url);
+        origin = imgUrl.origin;
+        ref = imgUrl.origin + '/';
+      }
+    } catch {
+      const imgUrl = new URL(url);
+      origin = imgUrl.origin;
+      ref = origin + '/';
     }
 
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Referer': ref,
+      'Origin': origin,
+      'Sec-Fetch-Dest': 'image',
+      'Sec-Fetch-Mode': 'no-cors',
+      'Sec-Fetch-Site': 'cross-site',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+    };
+
     const imageRes = await fetch(url, { headers });
-    
+
     if (!imageRes.ok) {
-      return res.status(imageRes.status).send('Failed to fetch image');
+      console.error(`Proxy image failed: ${imageRes.status} for ${url}`);
+      return res.status(imageRes.status).send('Failed to fetch image from source');
     }
 
     const contentType = imageRes.headers.get('content-type');
     if (contentType) {
       res.setHeader('Content-Type', contentType);
     }
-    
-    // Set caching headers for browser
-    res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 day
 
-    // Use Web Streams API to pipe to Express response
+    // Cache for 24h in browser
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    // Stream response body
     if (imageRes.body) {
       const reader = imageRes.body.getReader();
       while (true) {
@@ -878,6 +905,7 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
     res.status(500).send('Internal Server Error');
   }
 });
+
 
 // GET /sitemap.xml - Dynamic XML sitemap for SEO crawlers
 app.get('/sitemap.xml', async (req: Request, res: Response) => {
