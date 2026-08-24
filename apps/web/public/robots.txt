@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /importer
+Disallow: /api/
+
+Sitemap: https://paneliumscan.com/sitemap.xml

@@ -1,0 +1,22 @@
+{
+  "name": "inkverse",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "db:studio": "npm run studio -w apps/api",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5",
+    "tsx": "^4.7.1"
+  },
+  "prisma": {
+    "seed": "tsx apps/api/prisma/seed.ts"
+  }
+}
