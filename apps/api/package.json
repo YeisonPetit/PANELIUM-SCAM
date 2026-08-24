@@ -7,8 +7,9 @@
     "dev": "tsx watch --env-file=../../.env src/index.ts",
     "studio": "node --env-file=../../.env ../../node_modules/prisma/build/index.js studio --port 5555",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "generate": "prisma generate"
+    "start": "npx prisma db push --skip-generate && node dist/index.js",
+    "generate": "prisma generate",
+    "db:push": "prisma db push"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -17,6 +18,7 @@
     "@consumet/extensions": "^1.8.8",
     "@panelium/types": "*",
     "@prisma/client": "^5.10.2",
+    "prisma": "^5.10.2",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",
     "cors": "^2.8.5",
