@@ -35,34 +35,41 @@ app.use(
 
 app.use(express.json({ limit: '1mb' }));
 
-// General Rate Limiter: 1000 req per 15 min per IP
+// General Rate Limiter (lenient for webtoon readers)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1000,
+  max: 50000,
   message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // skip rate limiting for health checks
-    return req.path === '/health';
+    // Never rate-limit health, image proxies, or chapter reading
+    return (
+      req.path === '/health' ||
+      req.path === '/sitemap.xml' ||
+      req.path.includes('/proxy-image') ||
+      req.path.includes('/chapters/')
+    );
   },
 });
 
-// Strict Rate Limiter for Import Actions (30 per 15 min per IP)
+// Strict Rate Limiter for Import Actions (100 per 15 min per IP)
 const importLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 100,
   message: { error: 'Import rate limit exceeded. Please wait 15 minutes.' },
 });
 
-// Image Proxy Limiter (1000 per 5 min per IP)
+// Image Proxy Limiter
 const proxyLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
-  max: 1000,
+  max: 100000,
   message: { error: 'Proxy rate limit exceeded.' },
+  skip: () => true, // unthrottled for smooth reading
 });
 
 app.use('/api/', apiLimiter);
+
 
 // SSRF Safety Check for Image Proxy
 function isSafeUrl(targetUrl: string): boolean {

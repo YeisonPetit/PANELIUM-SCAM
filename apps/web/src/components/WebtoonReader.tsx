@@ -55,8 +55,8 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
         setLoading(false);
 
 
-        // If pages are still empty after lazy loading, it may be an external chapter
-        if (data.pages.length === 0 && data.mangadexId) {
+        // If pages are still empty while server is lazy-loading in background
+        if (data.pages.length === 0) {
           setLoadingPages(true);
           // Poll once more after 3s to let the server finish lazy loading
           setTimeout(() => {
@@ -68,7 +68,10 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
               })
               .catch(() => setLoadingPages(false));
           }, 3000);
+        } else {
+          setLoadingPages(false);
         }
+
 
         window.scrollTo({ top: 0, behavior: 'smooth' });
       })
