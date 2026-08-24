@@ -218,107 +218,84 @@ export const Catalog: React.FC<CatalogProps> = ({
       
       {/* Featured Manhwas Carousel Section (Matching Reference Screenshot Design) */}
       {activeFeatured && (
-        <div className="mb-10 glass rounded-3xl relative overflow-hidden shadow-[0_15px_50px_rgba(0,0,0,0.6)] border border-white/10 p-6 sm:p-10 transition-all">
-          <div className="absolute inset-0 bg-gradient-to-r from-rose-950/40 via-purple-950/30 to-black/90 pointer-events-none" />
-          
+        <div className="mb-8 glass rounded-2xl sm:rounded-3xl relative overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 transition-all">
+          {/* Background blur */}
+          <div className="absolute inset-0 bg-gradient-to-r from-rose-950/50 via-purple-950/30 to-black/90 pointer-events-none" />
           <img
             src={activeFeatured.banner || activeFeatured.cover}
             alt={activeFeatured.title}
-            className="absolute inset-0 w-full h-full object-cover opacity-20 blur-md mix-blend-overlay scale-110 pointer-events-none"
+            className="absolute inset-0 w-full h-full object-cover opacity-15 blur-md scale-110 pointer-events-none"
           />
 
-          <div className="relative z-10 flex flex-col md:flex-row items-center sm:items-start gap-8">
-            
-            {/* Cover Image Container */}
+          <div className="relative z-10 flex items-center gap-4 p-4 sm:p-8">
+
+            {/* Cover — smaller on mobile */}
             <div
-              className="w-48 sm:w-56 md:w-64 shrink-0 aspect-[3/4] rounded-2xl overflow-hidden shadow-2xl border border-white/15 group cursor-pointer relative mx-auto md:mx-0"
+              className="w-20 h-28 sm:w-44 sm:h-60 md:w-52 shrink-0 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border border-white/15 cursor-pointer"
               onClick={() => onSelectSeries(activeFeatured.slug)}
             >
               <img
                 src={activeFeatured.cover}
                 alt={activeFeatured.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                className="w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
             </div>
 
-            {/* Details & Info */}
-            <div className="flex-1 text-center md:text-left">
-              
-              {/* Badges Row */}
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-3">
-                <span className="bg-gradient-to-r from-rose-500 to-red-600 text-white font-black text-xs uppercase px-3.5 py-1.5 rounded-full shadow-md flex items-center gap-1">
-                  ✨ DESTACADO DEL DÍA
-                </span>
-                <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
-                  ★ {getRating(activeFeatured.title)}
-                </span>
-                <span className="bg-white/10 text-white font-semibold text-xs px-3 py-1.5 rounded-full border border-white/10">
-                  {activeFeatured.type}
-                </span>
-              </div>
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              {/* Destacado badge */}
+              <span className="inline-flex items-center gap-1 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black text-[10px] sm:text-xs uppercase px-2.5 py-1 rounded-full shadow-md mb-2">
+                ✨ Destacado del día
+              </span>
 
               {/* Title */}
-              <h2 className="text-3xl sm:text-4xl md:text-5xl font-black mb-3 tracking-tight text-white leading-tight drop-shadow-md">
+              <h2 className="text-base sm:text-3xl md:text-4xl font-black text-white leading-tight line-clamp-2 mb-3 sm:mb-4">
                 {activeFeatured.title}
               </h2>
 
-              {/* Description */}
-              <p className="text-gray-300 text-sm sm:text-base leading-relaxed mb-6 line-clamp-2 max-w-3xl font-medium">
-                {activeFeatured.description}
-              </p>
-
-              {/* Action Button & Carousel Controls */}
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
+              {/* Read button + carousel controls */}
+              <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
                 <motion.button
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => onSelectSeries(activeFeatured.slug)}
-                  className="bg-gradient-to-r from-rose-500 via-red-500 to-rose-600 hover:from-rose-600 hover:to-red-700 text-white font-bold px-7 py-3 rounded-2xl shadow-lg transition-all flex items-center gap-2 text-sm sm:text-base"
+                  className="bg-gradient-to-r from-rose-500 to-rose-600 text-white font-bold px-4 sm:px-7 py-2 sm:py-3 rounded-xl sm:rounded-2xl shadow-lg text-xs sm:text-base flex items-center gap-1.5"
                 >
-                  <span>🚀 Leer Serie Ahora</span>
+                  🚀 Leer ahora
                 </motion.button>
 
-                {/* Carousel Controls */}
                 {featuredSeries.length > 1 && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
                     <button
                       onClick={() => setFeaturedIndex((prev) => (prev - 1 + featuredSeries.length) % featuredSeries.length)}
-                      className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white flex items-center justify-center font-bold text-sm transition-all"
+                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 border border-white/10 text-white flex items-center justify-center text-sm transition-all"
                       aria-label="Anterior"
-                    >
-                      ←
-                    </button>
-                    <span className="text-xs text-gray-400 font-bold px-2">
-                      {featuredIndex + 1} / {featuredSeries.length}
+                    >←</button>
+                    <span className="text-xs text-gray-400 font-bold px-1">
+                      {featuredIndex + 1}/{featuredSeries.length}
                     </span>
                     <button
                       onClick={() => setFeaturedIndex((prev) => (prev + 1) % featuredSeries.length)}
-                      className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white flex items-center justify-center font-bold text-sm transition-all"
+                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 border border-white/10 text-white flex items-center justify-center text-sm transition-all"
                       aria-label="Siguiente"
-                    >
-                      →
-                    </button>
+                    >→</button>
                   </div>
                 )}
               </div>
-
             </div>
           </div>
         </div>
       )}
 
+
+
       {/* Latest Chapters Bar ("Últimas Actualizaciones") */}
       {latestChapters.length > 0 && (
-        <div className="mb-12">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse inline-block"></span>
-              ⚡ Últimas Actualizaciones de Capítulos
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm sm:text-xl font-black text-white flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-accent animate-pulse inline-block"></span>
+              ⚡ <span className="hidden sm:inline">Últimas Actualizaciones</span><span className="sm:hidden">Actualizaciones</span>
             </h3>
-            <span className="text-xs text-gray-400 bg-white/5 px-3 py-1 rounded-full border border-white/10 hidden sm:inline-block">
-              Sincronizado en tiempo real
-            </span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
@@ -470,19 +447,13 @@ export const Catalog: React.FC<CatalogProps> = ({
       </div>
 
       {/* Catalog Title & Counter */}
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2.5">
-          <span>Explorar Cómics</span>
-          <span className="text-xs bg-accent/20 text-accent border border-accent/30 font-bold px-3 py-1 rounded-full">
-            {filteredSeries.length} Encontrados
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-base sm:text-2xl font-black text-white flex items-center gap-2">
+          <span>Explorar</span>
+          <span className="text-xs bg-accent/20 text-accent border border-accent/30 font-bold px-2 py-0.5 rounded-full">
+            {filteredSeries.length}
           </span>
         </h3>
-
-        {sortBy === 'update' && (
-          <span className="text-xs text-accent font-semibold bg-accent/10 px-3 py-1 rounded-full border border-accent/20">
-            Ord: Última actualización de caps 🕒
-          </span>
-        )}
       </div>
 
       {/* Series Grid */}
@@ -502,96 +473,74 @@ export const Catalog: React.FC<CatalogProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
           {filteredSeries.map((item) => {
             const isFav = favorites.includes(item.id) || favorites.includes(item.slug);
             return (
               <motion.div
                 key={item.id}
-                whileHover={{ y: -6 }}
+                whileHover={{ y: -4 }}
                 transition={{ duration: 0.15 }}
                 onClick={() => onSelectSeries(item.slug)}
-                className="group cursor-pointer glass glass-hover rounded-3xl overflow-hidden shadow-xl flex flex-col relative border border-white/10"
+                className="group cursor-pointer glass rounded-2xl sm:rounded-3xl overflow-hidden shadow-md sm:shadow-xl flex flex-col relative border border-white/10"
               >
                   {/* Cover Image Container */}
                   <div className="relative aspect-[3/4] overflow-hidden bg-white/5">
                     <img
                       src={item.cover}
                       alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700"
+                      className="w-full h-full object-cover sm:group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0A0B0F] via-transparent to-transparent opacity-85" />
 
                     {/* Rating Badge */}
-                    <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md text-amber-400 text-[11px] font-black px-2.5 py-1 rounded-xl border border-amber-400/30 flex items-center gap-1 shadow-md">
+                    <div className="absolute top-2 left-2 bg-black/80 text-amber-400 text-[10px] font-black px-1.5 py-0.5 rounded-lg border border-amber-400/30 flex items-center gap-0.5">
                       <span>★</span> {getRating(item.title)}
                     </div>
 
-                    {/* Bookmark Heart / Star Button directly on card */}
+                    {/* Bookmark Button */}
                     <button
                       onClick={(e) => toggleFavoriteCard(e, item)}
-                      className={`absolute top-3 right-3 w-9 h-9 rounded-xl backdrop-blur-md flex items-center justify-center transition-all ${
+                      className={`absolute top-2 right-2 w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl backdrop-blur-md flex items-center justify-center text-sm ${
                         isFav
-                          ? 'bg-amber-500 text-black font-bold shadow-lg scale-105'
-                          : 'bg-black/60 hover:bg-black/90 text-white/80 border border-white/10'
+                          ? 'bg-amber-500 text-black font-bold shadow-lg'
+                          : 'bg-black/60 text-white/80 border border-white/10'
                       }`}
-                      title={isFav ? 'Quitar de favoritos' : 'Agregar a favoritos'}
                     >
                       {isFav ? '★' : '☆'}
                     </button>
 
-                    {/* Status & Type Badges */}
-                    <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
-                      <span className="bg-black/70 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border border-white/10">
-                        {item.type}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-lg border ${
-                          item.status === 'ONGOING'
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                            : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </div>
-
-                    {/* Chapter Count Pill */}
-                    <div className="absolute bottom-3 right-3 bg-accent text-white font-bold text-xs px-2.5 py-1 rounded-xl shadow-glow">
-                      {item.chapterCount} {item.chapterCount === 1 ? 'Cap' : 'Caps'}
+                    {/* Chapter Count */}
+                    <div className="absolute bottom-2 right-2 bg-accent text-white font-bold text-[10px] px-1.5 py-0.5 rounded-lg shadow-glow">
+                      {item.chapterCount} caps
                     </div>
                   </div>
 
-                  {/* Info Section */}
-                  <div className="p-5 flex-1 flex flex-col justify-between">
+                  {/* Info Section — compact on mobile */}
+                  <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-between">
                     <div>
-                      <h4 className="text-lg font-black text-white group-hover:text-accent-light transition-colors line-clamp-1 mb-1.5">
+                      <h4 className="text-xs sm:text-base font-black text-white line-clamp-1 mb-1">
                         {item.title}
                       </h4>
 
                       {item.updatedAt && (
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />
-                          <span className="text-[11px] text-accent font-semibold">
-                            Último cap. {timeAgo(item.updatedAt)}
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="w-1 h-1 rounded-full bg-accent animate-pulse shrink-0" />
+                          <span className="text-[10px] text-accent font-semibold">
+                            {timeAgo(item.updatedAt)}
                           </span>
                         </div>
                       )}
 
-                      <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed mb-3">
+                      <p className="text-[10px] sm:text-xs text-gray-400 line-clamp-2 leading-relaxed hidden sm:block">
                         {item.description}
                       </p>
                     </div>
 
-                    {/* Genre Tags */}
-                    <div className="flex flex-wrap gap-1 pt-2 border-t border-white/5">
-                      {item.genres.slice(0, 3).map((g) => (
-                        <span
-                          key={g}
-                          className="text-[10px] font-medium bg-white/5 text-gray-300 px-2 py-0.5 rounded-md border border-white/5"
-                        >
-                          {g}
-                        </span>
+                    {/* Genre Tags — hidden on very small screens */}
+                    <div className="hidden sm:flex flex-wrap gap-1 pt-2 border-t border-white/5">
+                      {item.genres.slice(0, 2).map((g) => (
+                        <span key={g} className="text-[10px] font-medium bg-white/5 text-gray-300 px-1.5 py-0.5 rounded-md border border-white/5">{g}</span>
                       ))}
                     </div>
                   </div>
