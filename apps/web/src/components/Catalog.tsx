@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faCompass, faArrowRight } from '@fortawesome/free-solid-svg-icons';
 
 export interface Series {
   id: string;
@@ -17,7 +19,14 @@ export interface Series {
   genres: string[];
   chapterCount: number;
   updatedAt?: string;
+  latestChapters?: Array<{
+    id: string;
+    number: number;
+    title?: string;
+    createdAt: string;
+  }>;
 }
+
 
 interface LatestChapter {
   id: string;
@@ -37,17 +46,19 @@ interface CatalogProps {
   onSelectSeries: (slug: string) => void;
   latestChapters?: LatestChapter[];
   onSelectChapter?: (chapterId: string) => void;
+  viewMode?: 'home' | 'library';
+  onGoLibrary?: () => void;
 }
 
 function timeAgo(dateStr?: string): string {
-  if (!dateStr) return 'Reciente';
+  if (!dateStr) return 'Recent';
   const now = Date.now();
   const then = new Date(dateStr).getTime();
   const diff = Math.floor((now - then) / 1000);
-  if (diff < 60) return `Hace ${diff}s`;
-  if (diff < 3600) return `Hace ${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `Hace ${Math.floor(diff / 3600)}h`;
-  return `Hace ${Math.floor(diff / 86400)}d`;
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
 }
 
 // Generate consistent pseudo-rating between 9.0 and 9.9
@@ -65,8 +76,9 @@ export const Catalog: React.FC<CatalogProps> = ({
   seriesList,
   loading,
   onSelectSeries,
-  latestChapters = [],
   onSelectChapter,
+  viewMode = 'home',
+  onGoLibrary,
 }) => {
   const { token, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,97 +114,102 @@ export const Catalog: React.FC<CatalogProps> = ({
       .catch((err) => console.error('Failed to load server favorites:', err));
   }, [token, user]);
 
-  const toggleFavoriteCard = (e: React.MouseEvent, series: Series) => {
+  // Toggle favorite on card
+  const toggleFavoriteCard = async (e: React.MouseEvent, item: Series) => {
     e.stopPropagation();
-    try {
-      let updated: string[];
-      if (favorites.includes(series.id) || favorites.includes(series.slug)) {
-        updated = favorites.filter((id) => id !== series.id && id !== series.slug);
-      } else {
-        updated = [...favorites, series.id];
-      }
-      setFavorites(updated);
-      localStorage.setItem('favorite-series', JSON.stringify(updated));
+    const isFav = favorites.includes(item.id) || favorites.includes(item.slug);
+    const newFavs = isFav
+      ? favorites.filter((id) => id !== item.id && id !== item.slug)
+      : [...favorites, item.id];
 
-      // Sync with database if logged in
-      if (token) {
-        fetch(`/api/user/favorites/${series.id}`, {
+    setFavorites(newFavs);
+    try {
+      localStorage.setItem('favorite-series', JSON.stringify(newFavs));
+    } catch (err) {
+      console.error('Failed to persist favorites:', err);
+    }
+
+    if (token) {
+      try {
+        await fetch(`/api/user/favorites/${item.id}`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
-        }).catch((err) => console.error('Error syncing favorite to DB:', err));
+        });
+      } catch (err) {
+        console.error('Failed to sync favorite with server:', err);
       }
-    } catch (err) {
-      console.error('Error toggling favorite:', err);
     }
   };
 
-
-  // Memoize pre-parsed timestamps for instant 0ms sorting
-  const seriesWithTime = useMemo(() => {
-    return seriesList.map((s) => ({
-      ...s,
-      _time: s.updatedAt ? new Date(s.updatedAt).getTime() : 0,
-    }));
-  }, [seriesList]);
-
-  // Collect all unique genres across series (memoized)
+  // Compute all unique genres from series list
   const allGenres = useMemo(() => {
-    return Array.from(
-      new Set(seriesList.flatMap((s) => s.genres || []))
-    ).sort();
+    const genreSet = new Set<string>();
+    seriesList.forEach((s) => {
+      s.genres.forEach((g) => genreSet.add(g));
+    });
+    return Array.from(genreSet).sort();
   }, [seriesList]);
 
-  // Featured series list (Top 10)
+  // Top featured series
   const featuredSeries = useMemo(() => {
-    return seriesList.slice(0,10);
+    return seriesList.slice(0, 5);
   }, [seriesList]);
 
-  // Auto-advance featured carousel
-  React.useEffect(() => {
-    if (featuredSeries.length <= 1) return;
-    const timer = setInterval(() => {
-      setFeaturedIndex((prev) => (prev + 1) % featuredSeries.length);
-    }, 6000);
-    return () => clearInterval(timer);
-  }, [featuredSeries.length]);
+  const activeFeatured = featuredSeries[featuredIndex] || featuredSeries[0];
 
-  // Lightning fast memoized filter & sort
+  // Filter and sort catalog
   const filteredSeries = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
+    let list = [...seriesList];
 
-    return seriesWithTime
-      .filter((item) => {
-        const matchesSearch =
-          !q ||
-          item.title.toLowerCase().includes(q) ||
-          item.author.toLowerCase().includes(q) ||
-          item.genres.some((g) => g.toLowerCase().includes(q));
+    // Status filter
+    if (selectedStatus !== 'ALL') {
+      list = list.filter((s) => s.status === selectedStatus);
+    }
 
-        const matchesStatus = selectedStatus === 'ALL' || item.status === selectedStatus;
-        const matchesGenre = selectedGenre === 'ALL' || item.genres.includes(selectedGenre);
-        const matchesFavorites =
-          !onlyFavorites || favorites.includes(item.id) || favorites.includes(item.slug);
+    // Genre filter
+    if (selectedGenre !== 'ALL') {
+      list = list.filter((s) => s.genres.includes(selectedGenre));
+    }
 
-        return matchesSearch && matchesStatus && matchesGenre && matchesFavorites;
-      })
-      .sort((a, b) => {
-        if (sortBy === 'update') {
-          return b._time - a._time;
-        }
-        if (sortBy === 'chapters') {
-          return b.chapterCount - a.chapterCount;
-        }
-        if (sortBy === 'title') {
-          return a.title.localeCompare(b.title);
-        }
-        if (sortBy === 'year') {
-          return b.releaseYear - a.releaseYear;
-        }
-        return 0;
-      });
-  }, [seriesWithTime, searchQuery, selectedStatus, selectedGenre, onlyFavorites, favorites, sortBy]);
+    // Favorites filter
+    if (onlyFavorites) {
+      list = list.filter((s) => favorites.includes(s.id) || favorites.includes(s.slug));
+    }
 
-  const activeFeatured = featuredSeries[featuredIndex] || null;
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          s.author.toLowerCase().includes(q) ||
+          s.artist.toLowerCase().includes(q) ||
+          s.genres.some((g) => g.toLowerCase().includes(q))
+      );
+    }
+
+    // Sorting
+    list.sort((a, b) => {
+      if (sortBy === 'chapters') return b.chapterCount - a.chapterCount;
+      if (sortBy === 'title') return a.title.localeCompare(b.title);
+      if (sortBy === 'year') return b.releaseYear - a.releaseYear;
+      // Default: latest update
+      const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    return list;
+  }, [seriesList, selectedStatus, selectedGenre, onlyFavorites, searchQuery, sortBy, favorites]);
+
+  // On Home: show ONLY the 20 most recently updated manhwas. On Library: show all.
+  const displayedSeries = useMemo(() => {
+    if (viewMode === 'home') {
+      return filteredSeries.slice(0, 20);
+    }
+    return filteredSeries;
+  }, [filteredSeries, viewMode]);
+
 
   if (loading) {
     return (
@@ -214,12 +231,11 @@ export const Catalog: React.FC<CatalogProps> = ({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-10">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8">
       
-      {/* Featured Manhwas Carousel Section (Matching Reference Screenshot Design) */}
-      {activeFeatured && (
+      {/* Featured Manhwas Carousel Section — Home only */}
+      {viewMode === 'home' && activeFeatured && (
         <div className="mb-8 glass rounded-2xl sm:rounded-3xl relative overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 transition-all">
-          {/* Background blur */}
           <div className="absolute inset-0 bg-gradient-to-r from-rose-950/50 via-purple-950/30 to-black/90 pointer-events-none" />
           <img
             src={activeFeatured.banner || activeFeatured.cover}
@@ -228,8 +244,6 @@ export const Catalog: React.FC<CatalogProps> = ({
           />
 
           <div className="relative z-10 flex items-center gap-4 p-4 sm:p-8">
-
-            {/* Cover — smaller on mobile */}
             <div
               className="w-20 h-28 sm:w-44 sm:h-60 md:w-52 shrink-0 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl border border-white/15 cursor-pointer"
               onClick={() => onSelectSeries(activeFeatured.slug)}
@@ -241,26 +255,22 @@ export const Catalog: React.FC<CatalogProps> = ({
               />
             </div>
 
-            {/* Info */}
             <div className="flex-1 min-w-0">
-              {/* Destacado badge */}
               <span className="inline-flex items-center gap-1 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black text-[10px] sm:text-xs uppercase px-2.5 py-1 rounded-full shadow-md mb-2">
-                ✨ Destacado del día
+                ✨ Featured Today
               </span>
 
-              {/* Title */}
               <h2 className="text-base sm:text-3xl md:text-4xl font-black text-white leading-tight line-clamp-2 mb-3 sm:mb-4">
                 {activeFeatured.title}
               </h2>
 
-              {/* Read button + carousel controls */}
               <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={() => onSelectSeries(activeFeatured.slug)}
                   className="bg-gradient-to-r from-rose-500 to-rose-600 text-white font-bold px-4 sm:px-7 py-2 sm:py-3 rounded-xl sm:rounded-2xl shadow-lg text-xs sm:text-base flex items-center gap-1.5"
                 >
-                  🚀 Leer ahora
+                  🚀 Read Now
                 </motion.button>
 
                 {featuredSeries.length > 1 && (
@@ -268,7 +278,7 @@ export const Catalog: React.FC<CatalogProps> = ({
                     <button
                       onClick={() => setFeaturedIndex((prev) => (prev - 1 + featuredSeries.length) % featuredSeries.length)}
                       className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 border border-white/10 text-white flex items-center justify-center text-sm transition-all"
-                      aria-label="Anterior"
+                      aria-label="Previous"
                     >←</button>
                     <span className="text-xs text-gray-400 font-bold px-1">
                       {featuredIndex + 1}/{featuredSeries.length}
@@ -276,7 +286,7 @@ export const Catalog: React.FC<CatalogProps> = ({
                     <button
                       onClick={() => setFeaturedIndex((prev) => (prev + 1) % featuredSeries.length)}
                       className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 border border-white/10 text-white flex items-center justify-center text-sm transition-all"
-                      aria-label="Siguiente"
+                      aria-label="Next"
                     >→</button>
                   </div>
                 )}
@@ -286,67 +296,31 @@ export const Catalog: React.FC<CatalogProps> = ({
         </div>
       )}
 
-
-
-      {/* Latest Chapters Bar ("Últimas Actualizaciones") */}
-      {latestChapters.length > 0 && (
+      {/* Browse Page Header — Library mode only */}
+      {viewMode === 'library' && (
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm sm:text-xl font-black text-white flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-accent animate-pulse inline-block"></span>
-              ⚡ <span className="hidden sm:inline">Últimas Actualizaciones</span><span className="sm:hidden">Actualizaciones</span>
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-            {latestChapters.map((chap, idx) => (
-              <motion.div
-                key={chap.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: idx * 0.03 }}
-                whileHover={{ y: -5 }}
-                onClick={() => onSelectChapter && onSelectChapter(chap.id)}
-                className="cursor-pointer glass glass-hover rounded-2xl overflow-hidden shadow-md group border border-white/5"
-              >
-                <div className="relative aspect-[3/4] overflow-hidden bg-white/5">
-                  <img
-                    src={chap.series.cover}
-                    alt={chap.series.title}
-                    className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent" />
-                  
-                  <div className="absolute bottom-2 left-2 bg-accent text-white text-[11px] font-black px-2 py-0.5 rounded-md shadow-glow">
-                    Cap. {chap.number}
-                  </div>
-                </div>
-
-                <div className="p-2.5">
-                  <p className="text-white font-bold text-xs line-clamp-1 group-hover:text-accent transition-colors">
-                    {chap.series.title}
-                  </p>
-                  <p className="text-gray-400 text-[10px] mt-0.5 font-medium flex items-center gap-1">
-                    <span>🕒</span> {timeAgo(chap.createdAt)}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+          <h1 className="text-3xl sm:text-4xl font-black text-white mb-2 flex items-center gap-3">
+            <span className="w-12 h-12 rounded-2xl bg-accent/20 border border-accent/30 flex items-center justify-center">
+              <FontAwesomeIcon icon={faCompass} className="text-accent text-xl" />
+            </span>
+            <span>Browse Comics</span>
+          </h1>
+          <p className="text-gray-400 text-sm">
+            Browse all <span className="text-accent font-bold">{seriesList.length}</span> series in the collection
+          </p>
         </div>
       )}
 
-      {/* Main Catalog Header & Filter Bar */}
+      {/* Main Catalog Header & Filter Bar — Browse only */}
+      {viewMode === 'library' && (
       <div className="glass p-5 sm:p-6 rounded-3xl border border-white/10 shadow-xl mb-8 space-y-5">
         
-        {/* Top Controls: Search Bar & Sort Order */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
           
-          {/* Search Input */}
           <div className="relative flex-1">
             <input
               type="text"
-              placeholder="🔍 Buscar manhwa, manga, autor o género..."
+              placeholder="🔍 Search manhwa, manga or genre..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-white/5 border border-white/10 focus:border-accent rounded-2xl px-4 py-3 text-sm text-white placeholder-gray-400 outline-none transition-all"
@@ -356,36 +330,33 @@ export const Catalog: React.FC<CatalogProps> = ({
                 onClick={() => setSearchQuery('')}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-white"
               >
-                ✕ Limpiar
+                ✕ Clear
               </button>
             )}
           </div>
 
-          {/* Sort By Dropdown Selector */}
           <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:inline">Ordenar:</span>
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider hidden sm:inline">Sort by:</span>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
               className="bg-white/10 border border-white/15 hover:border-accent text-xs sm:text-sm font-bold text-white px-4 py-3 rounded-2xl outline-none cursor-pointer transition-all"
             >
-              <option value="update" className="bg-gray-900 text-white">🕒 Fecha de actualización de caps</option>
-              <option value="chapters" className="bg-gray-900 text-white">🔥 Más Capítulos</option>
-              <option value="title" className="bg-gray-900 text-white">🔤 Nombre (A - Z)</option>
-              <option value="year" className="bg-gray-900 text-white">📅 Año de Lanzamiento</option>
+              <option value="update" className="bg-gray-900 text-white">🕒 Latest Updates</option>
+              <option value="chapters" className="bg-gray-900 text-white">🔥 Most Chapters</option>
+              <option value="title" className="bg-gray-900 text-white">🔤 Title (A - Z)</option>
+              <option value="year" className="bg-gray-900 text-white">📅 Release Year</option>
             </select>
           </div>
         </div>
 
-        {/* Filter Pills Bar (Status, Favorites) */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/10">
 
-          {/* Status Tabs */}
           <div className="flex flex-wrap items-center gap-1.5 bg-black/30 p-1.5 rounded-2xl border border-white/10">
             {[
-              { id: 'ALL', label: 'Todos los Estados' },
-              { id: 'ONGOING', label: 'En Emisión' },
-              { id: 'COMPLETED', label: 'Completados' },
+              { id: 'ALL', label: 'All Status' },
+              { id: 'ONGOING', label: 'Ongoing' },
+              { id: 'COMPLETED', label: 'Completed' },
             ].map((st) => (
               <button
                 key={st.id}
@@ -401,7 +372,6 @@ export const Catalog: React.FC<CatalogProps> = ({
             ))}
           </div>
 
-          {/* Favorites Filter Toggle Button */}
           <button
             onClick={() => setOnlyFavorites(!onlyFavorites)}
             className={`px-4 py-2 rounded-2xl text-xs font-bold border transition-all flex items-center gap-2 ${
@@ -410,14 +380,13 @@ export const Catalog: React.FC<CatalogProps> = ({
                 : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
             }`}
           >
-            <span>{onlyFavorites ? '★ Solo Mis Favoritos (' + favorites.length + ')' : '☆ Ver Favoritos'}</span>
+            <span>{onlyFavorites ? '★ Favorites Only (' + favorites.length + ')' : '☆ View Favorites'}</span>
           </button>
         </div>
 
-        {/* Quick Genre Chip Selector */}
         {allGenres.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 pt-3 border-t border-white/5">
-            <span className="text-[11px] text-gray-400 font-medium mr-1">Géneros:</span>
+            <span className="text-[11px] text-gray-400 font-medium mr-1">Genres:</span>
             <button
               onClick={() => setSelectedGenre('ALL')}
               className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
@@ -426,7 +395,7 @@ export const Catalog: React.FC<CatalogProps> = ({
                   : 'bg-white/5 text-gray-400 hover:text-white'
               }`}
             >
-              Todos
+              All
             </button>
 
             {allGenres.map((g) => (
@@ -445,21 +414,29 @@ export const Catalog: React.FC<CatalogProps> = ({
           </div>
         )}
       </div>
+      )}
 
-      {/* Catalog Title & Counter */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base sm:text-2xl font-black text-white flex items-center gap-2">
-          <span>Explorar</span>
-          <span className="text-xs bg-accent/20 text-accent border border-accent/30 font-bold px-2 py-0.5 rounded-full">
-            {filteredSeries.length}
-          </span>
-        </h3>
-      </div>
+      {viewMode === 'library' ? (
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base sm:text-2xl font-black text-white flex items-center gap-2">
+            <span>All Comics</span>
+            <span className="text-xs bg-accent/20 text-accent border border-accent/30 font-bold px-2 py-0.5 rounded-full">
+              {displayedSeries.length}
+            </span>
+          </h3>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base sm:text-2xl font-black text-white flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-accent animate-pulse inline-block" />
+            <span>Recently Updated</span>
+          </h3>
+        </div>
+      )}
 
-      {/* Series Grid */}
       {filteredSeries.length === 0 ? (
         <div className="glass p-12 rounded-3xl text-center text-gray-400 border border-white/10">
-          <p className="text-lg font-semibold mb-2">No se encontraron series con los filtros seleccionados.</p>
+          <p className="text-lg font-semibold mb-2">No series found matching selected filters.</p>
           <button
             onClick={() => {
               setSearchQuery('');
@@ -469,12 +446,12 @@ export const Catalog: React.FC<CatalogProps> = ({
             }}
             className="mt-4 bg-accent text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-glow"
           >
-            Restablecer Filtros
+            Reset Filters
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
-          {filteredSeries.map((item) => {
+          {displayedSeries.map((item) => {
             const isFav = favorites.includes(item.id) || favorites.includes(item.slug);
             return (
               <motion.div
@@ -512,29 +489,54 @@ export const Catalog: React.FC<CatalogProps> = ({
 
                     {/* Chapter Count */}
                     <div className="absolute bottom-2 right-2 bg-accent text-white font-bold text-[10px] px-1.5 py-0.5 rounded-lg shadow-glow">
-                      {item.chapterCount} caps
+                      {item.chapterCount} chs
                     </div>
                   </div>
 
                   {/* Info Section — compact on mobile */}
                   <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-between">
                     <div>
-                      <h4 className="text-xs sm:text-base font-black text-white line-clamp-1 mb-1">
+                      <h4 className="text-xs sm:text-base font-black text-white line-clamp-1 mb-2 group-hover:text-accent transition-colors">
                         {item.title}
                       </h4>
 
-                      {item.updatedAt && (
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="w-1 h-1 rounded-full bg-accent animate-pulse shrink-0" />
-                          <span className="text-[10px] text-accent font-semibold">
-                            {timeAgo(item.updatedAt)}
-                          </span>
-                        </div>
-                      )}
-
-                      <p className="text-[10px] sm:text-xs text-gray-400 line-clamp-2 leading-relaxed hidden sm:block">
-                        {item.description}
-                      </p>
+                      {/* Latest Chapters + Relative Time */}
+                      <div className="space-y-1 my-1">
+                        {item.latestChapters && item.latestChapters.length > 0 ? (
+                          item.latestChapters.slice(0, 2).map((chap) => (
+                            <div
+                              key={chap.id}
+                              onClick={(e) => {
+                                if (onSelectChapter) {
+                                  e.stopPropagation();
+                                  onSelectChapter(chap.id);
+                                }
+                              }}
+                              className="flex items-center justify-between gap-1.5 py-1 px-2 rounded-lg bg-white/[0.04] hover:bg-accent/20 border border-white/5 hover:border-accent/40 text-[11px] transition-all cursor-pointer group/chap"
+                            >
+                              <span className="font-bold text-gray-200 group-hover/chap:text-white flex items-center gap-1.5 truncate">
+                                <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />
+                                Ch. {chap.number}
+                              </span>
+                              <span className="text-[10px] text-gray-400 group-hover/chap:text-accent font-medium shrink-0">
+                                {timeAgo(chap.createdAt)}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="flex items-center justify-between gap-1.5 py-1 px-2 rounded-lg bg-white/[0.04] border border-white/5 text-[11px]">
+                            <span className="font-bold text-white flex items-center gap-1.5 truncate">
+                              <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />
+                              Ch. {item.chapterCount}
+                            </span>
+                            {item.updatedAt && (
+                              <span className="text-[10px] text-gray-400 font-medium shrink-0">
+                                {timeAgo(item.updatedAt)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Genre Tags — hidden on very small screens */}
@@ -544,9 +546,38 @@ export const Catalog: React.FC<CatalogProps> = ({
                       ))}
                     </div>
                   </div>
+
+
                 </motion.div>
               );
             })}
+        </div>
+      )}
+
+      {/* View Full Library CTA — Home mode only */}
+      {viewMode === 'home' && seriesList.length > 20 && (
+        <div className="mt-10 relative overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+          <div className="absolute inset-0 bg-gradient-to-r from-rose-900/40 via-purple-900/30 to-indigo-900/40 pointer-events-none" />
+          <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6 px-8 py-8">
+            <div>
+              <h3 className="text-xl sm:text-2xl font-black text-white mb-1">
+                Explore the Full Collection
+              </h3>
+              <p className="text-gray-400 text-sm">
+                You're seeing 20 of{' '}
+                <span className="text-accent font-bold">{seriesList.length}</span> series. Discover everything in the library.
+              </p>
+            </div>
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={onGoLibrary}
+              className="shrink-0 bg-gradient-to-r from-rose-500 to-purple-600 text-white font-black px-8 py-3.5 rounded-2xl shadow-[0_0_30px_rgba(239,68,68,0.3)] text-sm flex items-center gap-2.5 whitespace-nowrap"
+            >
+              <FontAwesomeIcon icon={faCompass} />
+              Browse All Comics ({seriesList.length}) <FontAwesomeIcon icon={faArrowRight} />
+            </motion.button>
+          </div>
         </div>
       )}
     </div>

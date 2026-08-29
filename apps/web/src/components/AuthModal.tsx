@@ -41,13 +41,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || 'Error al iniciar sesión');
+        throw new Error(data.error || 'Failed to sign in');
       }
 
       login(data.token, data.user);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Error de conexión');
+      setError(err.message || 'Connection error');
     } finally {
       setLoading(false);
     }
@@ -68,13 +68,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || 'Error al crear cuenta');
+        throw new Error(data.error || 'Failed to create account');
       }
 
       login(data.token, data.user);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Error de conexión');
+      setError(err.message || 'Connection error');
     } finally {
       setLoading(false);
     }
@@ -114,7 +114,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             </div>
             <div>
               <h3 className="text-xl font-black text-white">Panelium<span className="text-accent">Scan</span></h3>
-              <p className="text-xs text-gray-400">Guarda tus favoritos y sincroniza tu lectura</p>
+              <p className="text-xs text-gray-400">Save your favorites and sync reading history</p>
             </div>
           </div>
 
@@ -128,7 +128,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Iniciar Sesión
+              Sign In
             </button>
             <button
               onClick={() => { setTab('register'); setError(null); }}
@@ -138,7 +138,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Crear Cuenta
+              Create Account
             </button>
           </div>
 
@@ -155,21 +155,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-                  Correo o Usuario
+                  Email or Username
                 </label>
                 <input
                   type="text"
                   required
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="ejemplo@correo.com o tu_usuario"
+                  placeholder="name@email.com or username"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-                  Contraseña
+                  Password
                 </label>
                 <input
                   type="password"
@@ -189,7 +189,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 {loading ? (
                   <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <span>Entrar →</span>
+                  <span>Sign In →</span>
                 )}
               </button>
             </form>
@@ -197,35 +197,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             <form onSubmit={handleRegisterSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-                  Nombre de Usuario
+                  Username
                 </label>
                 <input
                   type="text"
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="ej. lector_pro"
+                  placeholder="e.g. reader_pro"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-                  Correo Electrónico
+                  Email Address
                 </label>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tu@correo.com"
+                  placeholder="you@email.com"
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">
-                  Contraseña (mínimo 6 caracteres)
+                  Password (min 6 characters)
                 </label>
                 <input
                   type="password"
@@ -246,18 +246,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 {loading ? (
                   <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
-                  <span>Registrarme y Entrar →</span>
+                  <span>Create Account & Sign In →</span>
                 )}
               </button>
             </form>
           )}
 
           <div className="mt-6 pt-4 border-t border-white/5 text-center text-xs text-gray-500">
-            Credenciales de Administrador iniciales: <code className="text-gray-400 bg-white/5 px-1.5 py-0.5 rounded">admin / Admin123!</code>
+            Default Administrator account: <code className="text-gray-400 bg-white/5 px-1.5 py-0.5 rounded">admin / Admin12345!</code>
           </div>
         </motion.div>
       </div>
     </AnimatePresence>
+
   );
 };
 

@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faHouse,
+  faCompass,
+  faCloudArrowUp,
+  faRightFromBracket,
+  faUser,
+} from '@fortawesome/free-solid-svg-icons';
 
 interface HealthState {
   status: string;
@@ -13,6 +21,7 @@ interface HealthState {
 interface NavbarProps {
   health: HealthState | null;
   onGoHome: () => void;
+  onGoLibrary: () => void;
   onOpenImporter: () => void;
   onOpenAuth: () => void;
   activeView: string;
@@ -21,6 +30,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   health,
   onGoHome,
+  onGoLibrary,
   onOpenImporter,
   onOpenAuth,
   activeView,
@@ -48,6 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   const handleGoHome = () => { setMobileMenuOpen(false); onGoHome(); };
+  const handleGoLibrary = () => { setMobileMenuOpen(false); onGoLibrary(); };
   const handleOpenImporter = () => { setMobileMenuOpen(false); onOpenImporter(); };
   const handleOpenAuth = () => { setMobileMenuOpen(false); onOpenAuth(); };
 
@@ -76,29 +87,42 @@ export const Navbar: React.FC<NavbarProps> = ({
           {isAdmin && (
             <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-xs font-semibold">
               <span className={`w-2 h-2 rounded-full ${pgOk && redisOk ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-              <span className="text-gray-300">{pgOk && redisOk ? 'Online' : 'Conectando...'}</span>
+              <span className="text-gray-300">{pgOk && redisOk ? 'Online' : 'Connecting...'}</span>
             </div>
           )}
 
           <button
             onClick={handleGoHome}
-            className={`px-3.5 py-2 rounded-xl text-sm font-bold transition-all ${
-              activeView === 'catalog' ? 'bg-accent text-white shadow-glow' : 'text-gray-300 hover:bg-white/5 hover:text-white'
+            className={`px-3.5 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+              activeView === 'home' ? 'bg-accent text-white shadow-glow' : 'text-gray-300 hover:bg-white/5 hover:text-white'
             }`}
           >
-            Catálogo
+            <FontAwesomeIcon icon={faHouse} className="text-xs" />
+            Home
+          </button>
+
+          <button
+            onClick={handleGoLibrary}
+            className={`px-3.5 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+              activeView === 'library' ? 'bg-accent text-white shadow-glow' : 'text-gray-300 hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            <FontAwesomeIcon icon={faCompass} className="text-xs" />
+            Browse
           </button>
 
           {isAdmin && (
             <button
               onClick={handleOpenImporter}
-              className={`px-3.5 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
                 activeView === 'importer' ? 'bg-rose-600 text-white shadow-glow' : 'bg-white/5 hover:bg-white/10 text-rose-300 border border-rose-500/30'
               }`}
             >
-              🌐 Importar
+              <FontAwesomeIcon icon={faCloudArrowUp} className="text-xs" />
+              Importer
             </button>
           )}
+
 
           {user ? (
             <div className="relative" ref={dropdownRef}>
@@ -123,7 +147,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     className="absolute right-0 mt-2 w-48 glass rounded-2xl border border-white/15 p-2 shadow-2xl z-50 bg-[#12131A]"
                   >
                     <div className="px-3 py-2 border-b border-white/5 mb-1">
-                      <p className="text-xs text-gray-400">Conectado como</p>
+                      <p className="text-xs text-gray-400">Signed in as</p>
                       <p className="text-sm font-bold text-white truncate">{user.username}</p>
                       <span className="text-[10px] text-accent font-semibold">{user.email}</span>
                     </div>
@@ -132,14 +156,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                         onClick={() => { setDropdownOpen(false); onOpenImporter(); }}
                         className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-rose-300 hover:bg-rose-500/10 flex items-center gap-2 transition-all"
                       >
-                        ⚙️ Panel de Importación
+                        <FontAwesomeIcon icon={faCloudArrowUp} />
+                        Importer Dashboard
                       </button>
                     )}
                     <button
                       onClick={() => { setDropdownOpen(false); logout(); }}
                       className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-gray-300 hover:text-rose-400 hover:bg-white/5 flex items-center gap-2 transition-all"
                     >
-                      🚪 Cerrar Sesión
+                      <FontAwesomeIcon icon={faRightFromBracket} />
+                      Sign Out
                     </button>
                   </motion.div>
                 )}
@@ -147,11 +173,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           ) : (
             <button
-              onClick={handleOpenAuth}
-              className="bg-white/5 hover:bg-accent border border-white/15 hover:border-accent text-white font-bold px-4 py-2 rounded-xl text-sm transition-all"
-            >
-              👤 Entrar
-            </button>
+            onClick={handleOpenAuth}
+            className="bg-white/5 hover:bg-accent border border-white/15 hover:border-accent text-white font-bold px-4 py-2 rounded-xl text-sm transition-all flex items-center gap-2"
+          >
+            <FontAwesomeIcon icon={faUser} className="text-xs" />
+            Sign In
+          </button>
           )}
         </div>
 
@@ -164,9 +191,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <button
               onClick={handleOpenAuth}
-              className="bg-white/5 border border-white/15 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] transition-all"
+              className="bg-white/5 border border-white/15 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] transition-all flex items-center"
             >
-              👤
+              <FontAwesomeIcon icon={faUser} className="text-xs" />
             </button>
           )}
 
@@ -174,7 +201,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={() => setMobileMenuOpen((p) => !p)}
             className="w-8 h-8 flex flex-col items-center justify-center gap-[5px] bg-white/5 border border-white/10 rounded-lg"
-            aria-label="Menú"
+            aria-label="Menu"
           >
             <motion.span
               animate={mobileMenuOpen ? { rotate: 45, y: 7 } : { rotate: 0, y: 0 }}
@@ -229,7 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {isAdmin && (
                 <div className="flex items-center gap-2 px-3 py-1.5">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${pgOk && redisOk ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                  <span className="text-[11px] text-gray-400 font-medium">{pgOk && redisOk ? 'Servidores Online' : 'Conectando...'}</span>
+                  <span className="text-[11px] text-gray-400 font-medium">{pgOk && redisOk ? 'Servers Online' : 'Connecting...'}</span>
                 </div>
               )}
 
@@ -238,10 +265,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={handleGoHome}
                 className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2.5 ${
-                  activeView === 'catalog' ? 'bg-accent text-white' : 'text-gray-200'
+                  activeView === 'home' ? 'bg-accent text-white' : 'text-gray-200'
                 }`}
               >
-                📚 Catálogo
+                <FontAwesomeIcon icon={faHouse} className="w-4" />
+                Home
+              </button>
+
+              <button
+                onClick={handleGoLibrary}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2.5 ${
+                  activeView === 'library' ? 'bg-accent text-white' : 'text-gray-200'
+                }`}
+              >
+                <FontAwesomeIcon icon={faCompass} className="w-4" />
+                Browse (All Comics)
               </button>
 
               {isAdmin && (
@@ -251,9 +289,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                     activeView === 'importer' ? 'bg-rose-600 text-white' : 'text-rose-300'
                   }`}
                 >
-                  🌐 Importar Series
+                  <FontAwesomeIcon icon={faCloudArrowUp} className="w-4" />
+                  Import Comics
                 </button>
               )}
+
 
               <div className="h-px bg-white/5 my-1" />
 
@@ -262,20 +302,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={() => { setMobileMenuOpen(false); logout(); }}
                   className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-semibold text-gray-300 flex items-center gap-2.5"
                 >
-                  🚪 Cerrar Sesión
+                  <FontAwesomeIcon icon={faRightFromBracket} className="w-4" />
+                  Sign Out
                 </button>
               ) : (
                 <button
                   onClick={handleOpenAuth}
                   className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold bg-accent/20 text-white flex items-center gap-2.5"
                 >
-                  👤 Iniciar Sesión / Registrarse
+                  <FontAwesomeIcon icon={faUser} className="w-4" />
+                  Sign In / Register
                 </button>
               )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
     </header>
   );
 };

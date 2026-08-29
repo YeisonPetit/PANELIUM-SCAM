@@ -100,47 +100,47 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <div className="glass p-8 rounded-3xl border border-rose-500/30 max-w-md">
           <span className="text-4xl mb-4 block">⚠️</span>
-          <h3 className="text-xl font-bold text-rose-400 mb-2">Error al cargar el capítulo</h3>
-          <p className="text-sm text-gray-300 mb-6">{error || 'Capítulo no encontrado'}</p>
+          <h3 className="text-xl font-bold text-rose-400 mb-2">Error loading chapter</h3>
+          <p className="text-sm text-gray-300 mb-6">{error || 'Chapter not found'}</p>
           <button
             onClick={() => window.history.back()}
             className="bg-accent text-white font-medium px-6 py-2.5 rounded-xl shadow-glow"
           >
-            Volver
+            Go Back
           </button>
         </div>
       </div>
     );
   }
 
-  // Chapter has no pages and no MangaDex ID (e.g., seeded demo data without images)
+  // Chapter has no pages and no MangaDex ID
   if (chapter.pages.length === 0 && !loadingPages) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <div className="glass p-8 rounded-3xl border border-yellow-500/30 max-w-md">
           <span className="text-4xl mb-4 block">📭</span>
           <h3 className="text-xl font-bold text-yellow-300 mb-2">
-            {chapter.title || `Capítulo ${chapter.number}`}
+            {chapter.title || `Chapter ${chapter.number}`}
           </h3>
           <p className="text-sm text-gray-300 mb-2">
-            Este capítulo no tiene páginas disponibles.
+            This chapter has no available pages.
           </p>
           <p className="text-xs text-gray-500 mb-6">
-            Puede que esté alojado externamente o aún no haya sido traducido.
+            It might be hosted externally or hasn't been translated yet.
           </p>
           <div className="flex flex-wrap gap-3 justify-center">
             <button
               onClick={() => onBackToSeries(chapter.series.slug)}
               className="bg-white/5 hover:bg-white/10 text-white font-semibold px-5 py-2.5 rounded-xl border border-white/10 text-sm"
             >
-              ← Volver a la serie
+              ← Back to Series
             </button>
             {chapter.nextChapterId && (
               <button
                 onClick={() => onNavigateChapter(chapter.nextChapterId!)}
                 className="bg-accent hover:bg-accent/80 text-white font-bold px-5 py-2.5 rounded-xl shadow-glow text-sm"
               >
-                Saltar al siguiente →
+                Skip to Next →
               </button>
             )}
           </div>
@@ -154,8 +154,8 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin mb-4 shadow-glow" />
-        <h3 className="text-xl font-bold text-white mb-1">Cargando páginas...</h3>
-        <p className="text-sm text-gray-400">Obteniendo imágenes del capítulo, por favor espera</p>
+        <h3 className="text-xl font-bold text-white mb-1">Loading pages...</h3>
+        <p className="text-sm text-gray-400">Fetching chapter images, please wait</p>
       </div>
     );
   }
@@ -174,10 +174,10 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
 
           <div className="text-center min-w-0 flex-1 px-2">
             <h2 className="text-xs sm:text-sm font-bold text-white line-clamp-1">
-              {chapter.title || `Cap. ${chapter.number}`}
+              {chapter.title || `Ch. ${chapter.number}`}
             </h2>
             <span className="text-[10px] text-accent font-medium hidden sm:block">
-              {chapter.pages.length} págs. • Lectura vertical
+              {chapter.pages.length} pages • Webtoon Scroll
             </span>
           </div>
 
@@ -191,7 +191,7 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
                   : 'opacity-30 border-white/5 cursor-not-allowed text-gray-500'
               }`}
             >
-              ‹ Ant.
+              ‹ Prev
             </button>
 
             <button
@@ -203,7 +203,7 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
                   : 'opacity-30 border-white/5 cursor-not-allowed text-gray-500'
               }`}
             >
-              Sig. ›
+              Next ›
             </button>
           </div>
         </div>
@@ -246,10 +246,10 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
       <footer className="w-full max-w-2xl my-12 px-6">
         <div className="glass p-8 rounded-3xl border border-white/10 text-center shadow-glow">
           <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
-            ¡Terminaste {chapter.title || `el Cap. ${chapter.number}`}! 🎉
+            You finished {chapter.title || `Chapter ${chapter.number}`}! 🎉
           </h3>
           <p className="text-sm text-gray-400 mb-6">
-            ¿Te gustó? Continúa leyendo o explora más series.
+            Enjoyed it? Keep reading or explore more series in our catalog.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3">
@@ -257,7 +257,7 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
               onClick={() => onBackToSeries(chapter.series.slug)}
               className="bg-white/5 hover:bg-white/10 text-white font-semibold px-5 py-2.5 rounded-2xl border border-white/10 transition-all text-sm"
             >
-              ← Ver la serie
+              ← View Series
             </button>
 
             {chapter.nextChapterId && (
@@ -267,13 +267,14 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
                 onClick={() => onNavigateChapter(chapter.nextChapterId!)}
                 className="bg-accent hover:bg-accent/80 text-white font-bold px-6 py-2.5 rounded-2xl shadow-glow transition-all text-sm flex items-center gap-2"
               >
-                <span>Siguiente capítulo</span>
+                <span>Next Chapter</span>
                 <span>→</span>
               </motion.button>
             )}
           </div>
         </div>
       </footer>
+
     </div>
   );
 };

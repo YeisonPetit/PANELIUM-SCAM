@@ -116,7 +116,7 @@ export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImpo
       });
 
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Error al importar');
+      if (!res.ok) throw new Error(json.error || 'Import failed');
 
 
       const newSlug = json.series.slug;
@@ -290,7 +290,7 @@ export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImpo
                     {isImported && (
                       <div className="absolute inset-0 bg-emerald-900/30 flex items-center justify-center">
                         <div className="bg-emerald-500/90 backdrop-blur-sm text-white text-xs font-black px-3 py-1.5 rounded-full border border-emerald-400/50 shadow-lg flex items-center gap-1.5">
-                          <span>✓</span><span>En tu biblioteca</span>
+                          <span>✓</span><span>In Your Library</span>
                         </div>
                       </div>
                     )}
@@ -356,10 +356,11 @@ export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImpo
                       onClick={() => onSeriesImported(resolvedSlug!)}
                       className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all"
                     >
-                      <span>✓ Ya importado • Ir a leer</span>
+                      <span>✓ Already in Library • Read Now</span>
                       <span>→</span>
                     </button>
                   ) : (
+
                     <button
                       disabled={isImporting}
                       onClick={() => handleImport(item)}

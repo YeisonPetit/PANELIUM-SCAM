@@ -426,8 +426,8 @@ app.get('/api/series', async (req: Request, res: Response) => {
         },
         chapters: {
           orderBy: { number: 'desc' },
-          take: 1,
-          select: { createdAt: true },
+          take: 2,
+          select: { id: true, number: true, title: true, createdAt: true },
         },
         _count: {
           select: { chapters: true },
@@ -441,8 +441,10 @@ app.get('/api/series', async (req: Request, res: Response) => {
       ...s,
       genres: s.genres.map((g: any) => g.genre.name),
       chapterCount: s._count.chapters,
+      latestChapters: s.chapters,
       updatedAt: s.chapters[0]?.createdAt || s.createdAt,
     }));
+
 
     if (sortBy === 'update') {
       formatted.sort((a: any, b: any) => {

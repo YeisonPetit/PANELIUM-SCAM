@@ -25,21 +25,22 @@ export const NotFound: React.FC<NotFoundProps> = ({ onGoHome }) => {
         </span>
 
         <h2 className="text-2xl sm:text-3xl font-black text-white mb-3">
-          Página no encontrada
+          Page Not Found
         </h2>
 
         <p className="text-gray-400 text-sm sm:text-base leading-relaxed mb-8">
-          El cómic o capítulo que buscas no existe o ha sido movido. Regresa al catálogo para seguir explorando.
+          The comic or chapter you're looking for doesn't exist or has been moved. Head back to the catalog to keep exploring.
         </p>
 
         <button
           onClick={onGoHome}
           className="bg-accent hover:bg-accent/80 text-white font-bold px-8 py-3.5 rounded-2xl shadow-glow transition-all flex items-center justify-center gap-2 mx-auto"
         >
-          <span>← Volver al Catálogo</span>
+          <span>← Back to Catalog</span>
         </button>
       </motion.div>
     </div>
+
   );
 };
 

@@ -103,7 +103,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
     return (
       <div className="max-w-7xl mx-auto px-6 py-20 text-center">
         <div className="inline-block w-14 h-14 border-4 border-accent border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-gray-400 text-lg font-medium">Cargando detalles de la serie...</p>
+        <p className="text-gray-400 text-lg font-medium">Loading series details...</p>
       </div>
     );
   }
@@ -157,10 +157,10 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
         onClick={onBack}
         className="mb-6 flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-all bg-white/5 hover:bg-accent/20 px-4 py-2.5 rounded-2xl border border-white/10 hover:border-accent/40 shadow-sm"
       >
-        <span className="text-accent font-bold">←</span> Volver al Catálogo
+        <span className="text-accent font-bold">←</span> Back to Catalog
       </button>
 
-      {/* Hero Banner Section (Matching User Reference Image Design) */}
+      {/* Hero Banner Section */}
       <div className="glass rounded-3xl overflow-hidden relative mb-10 shadow-[0_15px_50px_rgba(0,0,0,0.6)] border border-white/10 p-6 sm:p-10">
         {/* Background artwork with blur and subtle gradient */}
         <div className="absolute inset-0 bg-gradient-to-r from-rose-950/40 via-purple-950/30 to-black/90 pointer-events-none" />
@@ -194,7 +194,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
             {/* Top Badges Row */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-4">
               <span className="bg-gradient-to-r from-rose-500 to-red-600 text-white font-black text-xs uppercase px-3.5 py-1.5 rounded-full shadow-md flex items-center gap-1">
-                ✨ SERIE DESTACADA
+                ✨ FEATURED SERIES
               </span>
               <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
                 ★ {getRating(series.title)}
@@ -216,7 +216,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
               {series.title}
             </h1>
 
-            {/* Description with Ver más / Ver menos */}
+            {/* Description with View more / View less */}
             <div className="mb-5">
               <p className={`text-gray-300 text-sm sm:text-base leading-relaxed font-medium max-w-3xl ${
                 descExpanded ? '' : 'line-clamp-3'
@@ -228,7 +228,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                   onClick={() => setDescExpanded(!descExpanded)}
                   className="mt-1 text-xs text-accent hover:text-rose-300 font-semibold transition-colors"
                 >
-                  {descExpanded ? '▲ Ver menos' : '▼ Ver más'}
+                  {descExpanded ? '▲ View less' : '▼ View more'}
                 </button>
               )}
             </div>
@@ -246,21 +246,13 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
             </div>
 
             {/* Metadata Bar - compact on mobile */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 p-3 sm:p-4 rounded-2xl bg-white/[0.04] border border-white/10 mb-5 text-left">
+            <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 sm:gap-4 p-3 sm:p-4 rounded-2xl bg-white/[0.04] border border-white/10 mb-5 text-left max-w-sm">
               <div>
-                <span className="text-gray-400 block text-[10px] font-medium uppercase tracking-wider mb-0.5">Autor</span>
-                <span className="text-white font-bold text-xs sm:text-sm line-clamp-1">{series.author}</span>
-              </div>
-              <div>
-                <span className="text-gray-400 block text-[10px] font-medium uppercase tracking-wider mb-0.5">Artista</span>
-                <span className="text-white font-bold text-xs sm:text-sm line-clamp-1">{series.artist}</span>
-              </div>
-              <div>
-                <span className="text-gray-400 block text-[10px] font-medium uppercase tracking-wider mb-0.5">Año</span>
+                <span className="text-gray-400 block text-[10px] font-medium uppercase tracking-wider mb-0.5">Year</span>
                 <span className="text-white font-bold text-xs sm:text-sm">{series.releaseYear}</span>
               </div>
               <div>
-                <span className="text-gray-400 block text-[10px] font-medium uppercase tracking-wider mb-0.5">Capítulos</span>
+                <span className="text-gray-400 block text-[10px] font-medium uppercase tracking-wider mb-0.5">Chapters</span>
                 <span className="text-rose-400 font-black text-sm sm:text-base">{series.chapters.length}</span>
               </div>
             </div>
@@ -274,7 +266,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                   onClick={() => onSelectChapter(series.chapters[0].id)}
                   className="bg-gradient-to-r from-rose-500 via-red-500 to-rose-600 hover:from-rose-600 hover:to-red-700 text-white font-bold px-7 py-3 rounded-2xl shadow-lg transition-all flex items-center gap-2 text-sm sm:text-base"
                 >
-                  <span>🚀 Leer Serie Ahora (Cap. 1)</span>
+                  <span>🚀 Read Series Now (Ch. 1)</span>
                 </motion.button>
               )}
 
@@ -285,7 +277,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                   onClick={() => onSelectChapter(series.chapters[series.chapters.length - 1].id)}
                   className="bg-white/10 hover:bg-white/20 text-white font-semibold px-5 py-3 rounded-2xl border border-white/10 transition-all text-sm"
                 >
-                  <span>⚡ Último Cap. ({series.chapters[series.chapters.length - 1].number})</span>
+                  <span>⚡ Latest Ch. ({series.chapters[series.chapters.length - 1].number})</span>
                 </motion.button>
               )}
 
@@ -297,7 +289,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                     : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
                 }`}
               >
-                <span>{isBookmarked ? '★ Guardado en Favoritos' : '☆ Agregar a Favoritos'}</span>
+                <span>{isBookmarked ? '★ Saved to Bookmarks' : '☆ Add to Bookmarks'}</span>
               </button>
             </div>
 
@@ -311,9 +303,9 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-white/10">
           <div>
             <h3 className="text-2xl font-bold text-white flex items-center gap-3">
-              <span>Directorio de Capítulos</span>
+              <span>Chapter Directory</span>
               <span className="text-xs bg-accent/20 text-accent px-3 py-1 rounded-full border border-accent/30 font-bold">
-                {series.chapters.length} Disponibles
+                {series.chapters.length} Available
               </span>
             </h3>
           </div>
@@ -323,7 +315,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
             <div className="relative flex-1 sm:w-64">
               <input
                 type="text"
-                placeholder="Buscar capítulo..."
+                placeholder="Search chapter..."
                 value={chapterSearch}
                 onChange={(e) => setChapterSearch(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 focus:border-accent rounded-xl px-4 py-2 text-sm text-white placeholder-gray-500 outline-none transition-all"
@@ -351,7 +343,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
         {/* Chapters List */}
         {filteredChapters.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
-            No se encontraron capítulos que coincidan con "{chapterSearch}".
+            No chapters found matching "{chapterSearch}".
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -384,10 +376,10 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                           isRead ? 'text-gray-400 group-hover:text-accent-light' : 'text-white group-hover:text-accent-light'
                         }`}
                       >
-                        {chap.title || `Capítulo ${chap.number}`}
+                        {chap.title || `Chapter ${chap.number}`}
                       </h4>
                       <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
-                        {chap.pageCount ? `${chap.pageCount} págs.` : 'Completo'}
+                        {chap.pageCount ? `${chap.pageCount} pages` : 'Complete'}
                         {chap.createdAt && (
                           <>
                             <span className="opacity-30">·</span>
@@ -405,7 +397,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                         : 'bg-accent/20 text-accent border-accent/30 group-hover:bg-accent group-hover:text-white'
                     }`}
                   >
-                    {isRead ? 'Leído ✓' : 'Leer →'}
+                    {isRead ? 'Read ✓' : 'Read →'}
                   </span>
                 </motion.div>
               );
@@ -414,17 +406,17 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
         )}
       </div>
 
-      {/* Recommended / Similar Series Horizontal Carousel (Matching User Image Prompt) */}
+      {/* Recommended / Similar Series Horizontal Carousel */}
       {recommendedList.length > 0 && (
         <div className="glass p-6 sm:p-8 rounded-3xl border border-white/10 shadow-xl relative overflow-hidden">
           {/* Section Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-2xl font-black text-white flex items-center gap-2">
-                <span>🔥 Series del Mismo Género y Recomendadas</span>
+                <span>🔥 Recommended & Similar Series</span>
               </h3>
               <p className="text-xs text-gray-400 mt-1">
-                Títulos populares con temáticas similares que podrían gustarte
+                Popular titles with matching genres that you might enjoy
               </p>
             </div>
 
@@ -446,6 +438,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
               </button>
             </div>
           </div>
+
 
           {/* Horizontal Track Carousel */}
           <div

@@ -33,7 +33,7 @@ function SeriesDetailPage({
       .then((data) => {
         setSeriesData(data);
         if (data?.title) {
-          document.title = `${data.title} - Leer Capítulos Online | Panelium Scan`;
+          document.title = `${data.title} - Read Online | Panelium Scan`;
         }
         setLoading(false);
       })
@@ -105,15 +105,18 @@ function AppContent() {
     if (location.pathname.startsWith('/series/')) return 'detail';
     if (location.pathname.startsWith('/chapter/')) return 'reader';
     if (location.pathname === '/importer') return 'importer';
-    return 'catalog';
+    if (location.pathname === '/library') return 'library';
+    return 'home';
   };
 
   // Sync document title on primary route transitions
   useEffect(() => {
     if (location.pathname === '/') {
-      document.title = 'Panelium Scan - Leer Manhwas, Mangas y Webtoons Online Gratis';
+      document.title = 'Panelium Scan - Read Manhwa, Manga & Webtoons Online Free';
+    } else if (location.pathname === '/library') {
+      document.title = 'Comics Library | Panelium Scan';
     } else if (location.pathname === '/importer') {
-      document.title = 'Importar Cómics | Panelium Scan';
+      document.title = 'Import Comics | Panelium Scan';
     }
   }, [location.pathname]);
 
@@ -178,12 +181,15 @@ function AppContent() {
 
   const handleSelectChapter = (chapterId: string) => {
     // Add to local storage read history
-    setReadChapters((prev) => {
-      if (prev.includes(chapterId)) return prev;
-      const next = [...prev, chapterId];
-      localStorage.setItem('read-chapters', JSON.stringify(next));
-      return next;
-    });
+    if (!readChapters.includes(chapterId)) {
+      const updated = [...readChapters, chapterId];
+      setReadChapters(updated);
+      try {
+        localStorage.setItem('read-chapters', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Failed to persist read status:', err);
+      }
+    }
 
     // If logged in, sync history with PostgreSQL database
     if (token) {
@@ -201,6 +207,10 @@ function AppContent() {
   const handleGoHome = () => {
     refreshCatalog();
     navigate('/');
+  };
+
+  const handleGoLibrary = () => {
+    navigate('/library');
   };
 
   const handleOpenImporter = () => {
@@ -227,6 +237,7 @@ function AppContent() {
         <Navbar
           health={health}
           onGoHome={handleGoHome}
+          onGoLibrary={handleGoLibrary}
           onOpenImporter={handleOpenImporter}
           onOpenAuth={() => setIsAuthModalOpen(true)}
           activeView={currentView}
@@ -252,6 +263,25 @@ function AppContent() {
                 handleSelectChapter(chapId);
                 navigate(`/chapter/${chapId}`);
               }}
+              viewMode="home"
+              onGoLibrary={handleGoLibrary}
+            />
+          }
+        />
+
+        <Route
+          path="/library"
+          element={
+            <Catalog
+              seriesList={seriesList}
+              loading={loading}
+              onSelectSeries={(slug) => navigate(`/series/${slug}`)}
+              latestChapters={latestChapters}
+              onSelectChapter={(chapId) => {
+                handleSelectChapter(chapId);
+                navigate(`/chapter/${chapId}`);
+              }}
+              viewMode="library"
             />
           }
         />
@@ -279,22 +309,22 @@ function AppContent() {
                   <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-3xl mx-auto mb-4">
                     🔒
                   </div>
-                  <h2 className="text-2xl font-black text-white mb-2">Acceso Restringido</h2>
+                  <h2 className="text-2xl font-black text-white mb-2">Restricted Access</h2>
                   <p className="text-gray-400 text-sm leading-relaxed mb-6">
-                    El panel de importación de cómics está reservado únicamente para cuentas de Administrador.
+                    The comic importer panel is reserved exclusively for Administrator accounts.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <button
                       onClick={() => setIsAuthModalOpen(true)}
                       className="bg-accent hover:bg-accent/80 text-white font-bold px-6 py-3 rounded-xl shadow-glow transition-all"
                     >
-                      Iniciar Sesión como Admin
+                      Sign In as Admin
                     </button>
                     <button
                       onClick={handleGoHome}
                       className="bg-white/5 hover:bg-white/10 text-gray-300 font-bold px-6 py-3 rounded-xl border border-white/10 transition-all"
                     >
-                      Volver al Inicio
+                      Back to Home
                     </button>
                   </div>
                 </div>
