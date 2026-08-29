@@ -4,9 +4,11 @@ services:
   postgres:
     image: postgres:15-alpine
     restart: always
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-panelium}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-panelium_secure_pass_2026}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-PaneliumSecure2026!}
       POSTGRES_DB: ${POSTGRES_DB:-panelium}
     volumes:
       - postgres_data:/var/lib/postgresql/data
