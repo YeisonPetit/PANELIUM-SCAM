@@ -52,6 +52,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    volumes:
+      # Certificados SSL de Let's Encrypt (generados con Certbot en el host)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # Directorio para validación ACME (renovación automática)
+      - /var/www/certbot:/var/www/certbot:ro
     environment:
       - VITE_API_URL=/
     depends_on:
