@@ -538,7 +538,6 @@ export const Catalog: React.FC<CatalogProps> = ({
                         )}
                       </div>
                     </div>
-
                     {/* Genre Tags — hidden on very small screens */}
                     <div className="hidden sm:flex flex-wrap gap-1 pt-2 border-t border-white/5">
                       {item.genres.slice(0, 2).map((g) => (
