@@ -10,10 +10,27 @@ jobs:
   deploy:
     name: Deploy al VPS
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST_RAW: ${{ secrets.VPS_SSH_HOST != '' && secrets.VPS_SSH_HOST || secrets.VPS_HOST }}
+      DEPLOY_PORT: ${{ secrets.VPS_SSH_PORT != '' && secrets.VPS_SSH_PORT || '22' }}
+      DEPLOY_USER: ${{ secrets.VPS_SSH_USER != '' && secrets.VPS_SSH_USER || 'root' }}
 
     steps:
       - name: 📥 Checkout del código
         uses: actions/checkout@v4
+
+      - name: 🧹 Normalizar host SSH
+        run: |
+          DEPLOY_HOST="${DEPLOY_HOST_RAW#http://}"
+          DEPLOY_HOST="${DEPLOY_HOST#https://}"
+          DEPLOY_HOST="${DEPLOY_HOST%%/*}"
+
+          if [ -z "$DEPLOY_HOST" ]; then
+            echo "❌ El host SSH está vacío. Configura VPS_SSH_HOST o VPS_HOST."
+            exit 1
+          fi
+
+          echo "DEPLOY_HOST=$DEPLOY_HOST" >> "$GITHUB_ENV"
 
       - name: 🔐 Configurar SSH
         run: |
@@ -23,7 +40,7 @@ jobs:
           printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           # Agregar el host a known_hosts para evitar prompt interactivo
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           echo "SSH configurado correctamente"
 
       - name: 📦 Subir código al VPS
@@ -33,16 +50,19 @@ jobs:
             --exclude='node_modules' \
             --exclude='.env' \
             --exclude='apps/*/node_modules' \
-            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-            ./ root@${{ secrets.VPS_HOST }}:/opt/panelium/
+            -e "ssh -i ~/.ssh/id_ed25519 -p $DEPLOY_PORT -o ConnectTimeout=20 -o ConnectionAttempts=3 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/panelium/"
 
       - name: 🐳 Build y deploy con Docker Compose
         run: |
           ssh \
             -i ~/.ssh/id_ed25519 \
+            -p "$DEPLOY_PORT" \
+            -o ConnectTimeout=20 \
+            -o ConnectionAttempts=3 \
             -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile=/dev/null \
-            root@${{ secrets.VPS_HOST }} bash << 'ENDSSH'
+            "$DEPLOY_USER@$DEPLOY_HOST" bash << 'ENDSSH'
             set -e
             cd /opt/panelium
 
@@ -64,4 +84,3 @@ jobs:
 
       - name: ✅ Deploy completado
         run: echo "🎉 Deploy exitoso a https://paneliumscan.com"
-
