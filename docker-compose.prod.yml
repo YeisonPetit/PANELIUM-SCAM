@@ -32,9 +32,11 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: always
+    ports:
+      - "5555:5555"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-panelium}:${POSTGRES_PASSWORD:-panelium_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-panelium}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-panelium}:${POSTGRES_PASSWORD:-PaneliumSecure2026!}@postgres:5432/${POSTGRES_DB:-panelium}
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET:-panelium_super_secret_jwt_2026}
       - PORT=4000
