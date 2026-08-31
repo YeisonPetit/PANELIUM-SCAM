@@ -19,13 +19,27 @@ async function main() {
   const adventureGenre = await prisma.genre.create({ data: { name: 'Adventure', slug: 'adventure' } });
   const supernaturalGenre = await prisma.genre.create({ data: { name: 'Supernatural', slug: 'supernatural' } });
 
-  // Create Sample User
-  await prisma.user.create({
-    data: {
+  // Create Admin User
+  await prisma.user.upsert({
+    where: { email: 'admin@panelium.com' },
+    update: {},
+    create: {
       username: 'admin',
       email: 'admin@panelium.com',
-      password: 'hashed_password_placeholder',
+      password: '$2a$10$7qB2zUu8kYI1V1WzD8K4.OnnK1h9Cg6xY/xL7V8Q6tLp.xP7aFwWi', // Admin123!
       role: 'ADMIN',
+    },
+  });
+
+  // Create Normal User
+  await prisma.user.upsert({
+    where: { email: 'user@panelium.com' },
+    update: {},
+    create: {
+      username: 'lector',
+      email: 'user@panelium.com',
+      password: '$2a$10$1Y8g4YQk1P.qR1kO7tT.1eU1b2C3d4E5f6G7h8I9j0K1L2M3N4O5P', // User123!
+      role: 'USER',
     },
   });
 
