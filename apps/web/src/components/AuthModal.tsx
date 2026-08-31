@@ -263,10 +263,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               </button>
             </form>
           )}
-
-          <div className="mt-6 pt-4 border-t border-white/5 text-center text-xs text-gray-500">
-            Default Administrator account: <code className="text-gray-400 bg-white/5 px-1.5 py-0.5 rounded">admin / Admin123!</code>
-          </div>
         </motion.div>
       </div>
     </AnimatePresence>
