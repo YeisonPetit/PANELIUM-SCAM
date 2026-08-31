@@ -61,9 +61,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        localStorage.setItem('auth-user', JSON.stringify(data.user));
+        try {
+          const data = await res.json();
+          if (data?.user) {
+            setUser(data.user);
+            localStorage.setItem('auth-user', JSON.stringify(data.user));
+          }
+        } catch {
+          // Ignore invalid JSON format on refresh
+        }
       } else {
         // Token expired or invalid
         logout();

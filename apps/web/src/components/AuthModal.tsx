@@ -38,16 +38,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         body: JSON.stringify({ identifier, password: loginPassword }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        const rawText = await res.text().catch(() => '');
+        throw new Error(rawText || `Error ${res.status}: Comunicación fallida`);
+      }
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to sign in');
+        throw new Error(data.error || 'Credenciales inválidas. Verifica usuario y contraseña.');
       }
 
       login(data.token, data.user);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Connection error');
+      setError(err.message || 'Error de conexión');
     } finally {
       setLoading(false);
     }
@@ -65,16 +71,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         body: JSON.stringify({ username, email, password: registerPassword }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        const rawText = await res.text().catch(() => '');
+        throw new Error(rawText || `Error ${res.status}: Comunicación fallida`);
+      }
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to create account');
+        throw new Error(data.error || 'Error al crear la cuenta.');
       }
 
       login(data.token, data.user);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Connection error');
+      setError(err.message || 'Error de conexión');
     } finally {
       setLoading(false);
     }
@@ -253,7 +265,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           )}
 
           <div className="mt-6 pt-4 border-t border-white/5 text-center text-xs text-gray-500">
-            Default Administrator account: <code className="text-gray-400 bg-white/5 px-1.5 py-0.5 rounded">admin / Admin12345!</code>
+            Default Administrator account: <code className="text-gray-400 bg-white/5 px-1.5 py-0.5 rounded">admin / Admin123!</code>
           </div>
         </motion.div>
       </div>

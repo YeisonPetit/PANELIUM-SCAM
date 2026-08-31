@@ -1028,6 +1028,18 @@ app.get('/sitemap.xml', async (req: Request, res: Response) => {
   }
 });
 
+// Centralized JSON Error Handler
+app.use((err: any, req: Request, res: Response, next: any) => {
+  console.error('Unhandled API Error:', err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  const status = err.status || err.statusCode || 500;
+  return res.status(status).json({
+    error: err.message || 'Error interno en el servidor',
+  });
+});
+
 app.listen(port, async () => {
   console.log(`🚀 PaneliumScan API listening on port ${port}`);
   await ensureAdminUser();
