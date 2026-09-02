@@ -53,6 +53,9 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
   const [loadingPages, setLoadingPages] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const prefetchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const onChapterLoadedRef = useRef(onChapterLoaded);
+  onChapterLoadedRef.current = onChapterLoaded;
+  const currentLoadedEndpointRef = useRef<string | null>(null);
 
   const endpointUrl = slug && chapterNumber !== undefined
     ? `/api/series/${encodeURIComponent(slug)}/chapters/${chapterNumber}`
@@ -94,19 +97,16 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
     }, 1500); // 1.5s idle delay so current page loads first
   }, []);
 
-  const fetchChapter = useCallback((isRetry = false) => {
-    if (!endpointUrl) {
-      setError('Chapter information is missing');
-      setLoading(false);
-      return;
-    }
+  const fetchChapter = useCallback((targetUrl: string, isRetry = false) => {
+    const isNewChapterNavigation = currentLoadedEndpointRef.current !== targetUrl;
 
     // Check in-memory pre-loaded cache first for 0s transition
-    if (chapterCache.has(endpointUrl)) {
-      const cached = chapterCache.get(endpointUrl)!;
+    if (chapterCache.has(targetUrl)) {
+      const cached = chapterCache.get(targetUrl)!;
       setChapter(cached);
       setLoading(false);
       setError(null);
+      currentLoadedEndpointRef.current = targetUrl;
 
       if (cached.series?.title) {
         document.title = `Ch. ${cached.number} - ${cached.series.title} | Panelium Scan`;
@@ -135,8 +135,13 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
         });
       }
 
-      if (onChapterLoaded) onChapterLoaded(cached);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (onChapterLoadedRef.current) onChapterLoadedRef.current(cached);
+
+      // Only scroll to top on genuine new chapter navigation, NEVER on tab switch or re-render
+      if (isNewChapterNavigation) {
+        window.scrollTo({ top: 0, behavior: 'instant' as any });
+      }
+
       prefetchNextChapter(cached);
       return;
     }
@@ -144,14 +149,15 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
     if (!isRetry) setLoading(true);
     setError(null);
 
-    fetch(endpointUrl)
+    fetch(targetUrl)
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load chapter content');
         return res.json();
       })
       .then((data: ChapterData) => {
-        chapterCache.set(endpointUrl, data);
+        chapterCache.set(targetUrl, data);
         setChapter(data);
+        currentLoadedEndpointRef.current = targetUrl;
 
         if (data?.series?.title) {
           document.title = `Ch. ${data.number} - ${data.series.title} | Panelium Scan`;
@@ -180,10 +186,15 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
           });
         }
 
-        if (onChapterLoaded) {
-          onChapterLoaded(data);
+        if (onChapterLoadedRef.current) {
+          onChapterLoadedRef.current(data);
         }
         setLoading(false);
+
+        // Only scroll to top on genuine new chapter navigation
+        if (isNewChapterNavigation) {
+          window.scrollTo({ top: 0, behavior: 'instant' as any });
+        }
 
         // Preload next chapter in background
         prefetchNextChapter(data);
@@ -192,13 +203,13 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
         if (data.pages.length === 0) {
           setLoadingPages(true);
           setTimeout(() => {
-            fetch(endpointUrl)
+            fetch(targetUrl)
               .then((r) => r.json())
               .then((refreshed: ChapterData) => {
-                chapterCache.set(endpointUrl, refreshed);
+                chapterCache.set(targetUrl, refreshed);
                 setChapter(refreshed);
-                if (onChapterLoaded) {
-                  onChapterLoaded(refreshed);
+                if (onChapterLoadedRef.current) {
+                  onChapterLoadedRef.current(refreshed);
                 }
                 setLoadingPages(false);
                 prefetchNextChapter(refreshed);
@@ -208,21 +219,21 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
         } else {
           setLoadingPages(false);
         }
-
-        window.scrollTo({ top: 0, behavior: 'smooth' });
       })
       .catch((err) => {
         setError(err.message);
         setLoading(false);
       });
-  }, [endpointUrl, onChapterLoaded, prefetchNextChapter]);
+  }, [prefetchNextChapter]);
 
   useEffect(() => {
-    fetchChapter();
+    if (endpointUrl) {
+      fetchChapter(endpointUrl);
+    }
     return () => {
       if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current);
     };
-  }, [fetchChapter]);
+  }, [endpointUrl, fetchChapter]);
 
   if (loading) {
     return (
