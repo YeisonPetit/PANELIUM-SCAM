@@ -394,7 +394,7 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
       </main>
 
       {/* Clean End-of-Chapter Non-Intrusive Ad Placement */}
-      <ChapterAdBanner slotId="ad-chapter-bottom" />
+      <ChapterAdBanner key={chapter.id} />
 
       {/* Bottom End-of-Chapter Navigation */}
       <footer className="w-full max-w-2xl my-8 px-6">
