@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { saveProgress } from './ContinueReadingWidget';
 import { injectChapterSchema } from '../utils/schema';
+import { ChapterAdBanner } from './ChapterAdBanner';
 
 export interface PageData {
   id: string;
@@ -392,8 +393,11 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
         ))}
       </main>
 
+      {/* Clean End-of-Chapter Non-Intrusive Ad Placement */}
+      <ChapterAdBanner slotId="ad-chapter-bottom" />
+
       {/* Bottom End-of-Chapter Navigation */}
-      <footer className="w-full max-w-2xl my-12 px-6">
+      <footer className="w-full max-w-2xl my-8 px-6">
         <div className="glass p-8 rounded-3xl border border-white/10 text-center shadow-glow">
           <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
             You finished {chapter.title || `Chapter ${chapter.number}`}! 🎉
