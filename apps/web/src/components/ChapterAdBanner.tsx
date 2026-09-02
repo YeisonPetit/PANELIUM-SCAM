@@ -8,8 +8,14 @@ export const ChapterAdBanner: React.FC<ChapterAdBannerProps> = ({
   className = '',
 }) => {
   const adContainerRef = useRef<HTMLDivElement>(null);
+  const isProduction =
+    import.meta.env.PROD &&
+    typeof window !== 'undefined' &&
+    !['localhost', '127.0.0.1'].includes(window.location.hostname);
 
   useEffect(() => {
+    if (!isProduction) return;
+
     const container = adContainerRef.current;
     if (!container) return;
 
@@ -34,7 +40,7 @@ export const ChapterAdBanner: React.FC<ChapterAdBannerProps> = ({
         container.innerHTML = '';
       }
     };
-  }, []);
+  }, [isProduction]);
 
   return (
     <div className={`w-full max-w-3xl my-6 px-3 ${className}`}>
@@ -42,14 +48,23 @@ export const ChapterAdBanner: React.FC<ChapterAdBannerProps> = ({
         
         {/* Subtle Label */}
         <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2 block">
-          Sponsored
+          Sponsored {!isProduction && '(Modo Desarrollo - Inactivo)'}
         </span>
 
         {/* Adsterra Native Banner Injection Target */}
-        <div
-          ref={adContainerRef}
-          className="w-full flex items-center justify-center min-h-[90px] overflow-hidden"
-        />
+        {isProduction ? (
+          <div
+            ref={adContainerRef}
+            className="w-full flex items-center justify-center min-h-[90px] overflow-hidden"
+          />
+        ) : (
+          <div className="w-full flex flex-col items-center justify-center min-h-[90px] border border-dashed border-white/10 rounded-xl bg-white/[0.01] p-3 text-xs text-gray-400">
+            <span className="font-medium text-gray-300">Espacio de Publicidad (Adsterra)</span>
+            <span className="text-[11px] text-gray-500 mt-0.5">
+              Script deshabilitado en entorno local para proteger tu cuenta de impresiones y clics inválidos.
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
