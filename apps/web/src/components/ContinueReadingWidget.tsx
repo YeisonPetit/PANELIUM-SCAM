@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faPlay,
@@ -34,26 +35,48 @@ export function getAllProgress(): ReadingProgress[] {
   }
 }
 
-/** Save or update a progress entry for a given series */
+/** Save or update a progress entry for a given series & sync to server */
 export function saveProgress(entry: ReadingProgress) {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const map: Record<string, ReadingProgress> = raw ? JSON.parse(raw) : {};
     map[entry.seriesSlug] = entry;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+
+    // Cloud sync if user is logged in
+    const token = localStorage.getItem('token');
+    if (token && entry.chapterId) {
+      fetch('/api/user/history', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ chapterId: entry.chapterId }),
+      }).catch(() => {});
+    }
   } catch (e) {
     console.error('Failed to save reading progress:', e);
   }
 }
 
-/** Remove a single series entry from progress */
+/** Remove a single series entry from progress locally and in cloud */
 export function removeProgress(slug: string) {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const map: Record<string, ReadingProgress> = JSON.parse(raw);
-    delete map[slug];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    if (raw) {
+      const map: Record<string, ReadingProgress> = JSON.parse(raw);
+      delete map[slug];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    }
+
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetch(`/api/user/history/${encodeURIComponent(slug)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    }
   } catch {
     // ignore
   }
@@ -76,15 +99,42 @@ export const ContinueReadingWidget: React.FC<ContinueReadingWidgetProps> = ({
   onResume,
   onSelectSeries,
 }) => {
+  const { token, user } = useAuth();
   const [items, setItems] = useState<ReadingProgress[]>([]);
 
   const reload = () => setItems(getAllProgress());
 
+  // Sync from server when logged in
   useEffect(() => {
     reload();
+
+    if (token) {
+      fetch('/api/user/history', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.history && Array.isArray(data.history)) {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            const map: Record<string, ReadingProgress> = raw ? JSON.parse(raw) : {};
+
+            // Merge server history with local storage
+            data.history.forEach((h: ReadingProgress) => {
+              if (!map[h.seriesSlug] || h.readAt > map[h.seriesSlug].readAt) {
+                map[h.seriesSlug] = h;
+              }
+            });
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+            setItems(Object.values(map).sort((a, b) => b.readAt - a.readAt));
+          }
+        })
+        .catch(() => {});
+    }
+
     window.addEventListener('storage', reload);
     return () => window.removeEventListener('storage', reload);
-  }, []);
+  }, [token, user]);
 
   const handleDismiss = (e: React.MouseEvent, slug: string) => {
     e.stopPropagation();

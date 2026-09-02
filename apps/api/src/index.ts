@@ -306,7 +306,7 @@ app.post('/api/user/favorites/:seriesId', requireAuth, async (req: Authenticated
   }
 });
 
-// GET /api/user/history - Obtener historial de lectura del usuario
+// GET /api/user/history - Obtener historial de lectura del usuario formateado para Continuar Leyendo
 app.get('/api/user/history', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const history = await prisma.history.findMany({
@@ -329,14 +329,24 @@ app.get('/api/user/history', requireAuth, async (req: AuthenticatedRequest, res:
       },
     });
 
-    return res.json({ history });
+    // Formatear items para el widget Continue Reading
+    const formatted = history.map((h) => ({
+      seriesSlug: h.chapter.series.slug,
+      seriesTitle: h.chapter.series.title,
+      seriesCover: h.chapter.series.cover,
+      chapterNumber: h.chapter.number,
+      chapterId: h.chapter.id,
+      readAt: new Date(h.updatedAt).getTime(),
+    }));
+
+    return res.json({ history: formatted });
   } catch (error) {
     console.error('Get history error:', error);
     return res.status(500).json({ error: 'Error al obtener historial.' });
   }
 });
 
-// POST /api/user/history - Guardar progreso de lectura
+// POST /api/user/history - Guardar progreso de lectura en la base de datos
 app.post('/api/user/history', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { chapterId, page = 1 } = req.body;
@@ -361,6 +371,39 @@ app.post('/api/user/history', requireAuth, async (req: AuthenticatedRequest, res
   } catch (error) {
     console.error('Save history error:', error);
     return res.status(500).json({ error: 'Error al guardar historial.' });
+  }
+});
+
+// DELETE /api/user/history/:seriesSlug - Eliminar serie del historial en la nube
+app.delete('/api/user/history/:seriesSlug', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { seriesSlug } = req.params;
+    const userId = req.user!.id;
+
+    const series = await prisma.series.findFirst({
+      where: { OR: [{ slug: seriesSlug }, { id: seriesSlug }] },
+      select: { id: true },
+    });
+
+    if (series) {
+      const chapters = await prisma.chapter.findMany({
+        where: { seriesId: series.id },
+        select: { id: true },
+      });
+      const chapterIds = chapters.map((c) => c.id);
+
+      await prisma.history.deleteMany({
+        where: {
+          userId,
+          chapterId: { in: chapterIds },
+        },
+      });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Delete history error:', error);
+    return res.status(500).json({ error: 'Error al eliminar historial.' });
   }
 });
 
