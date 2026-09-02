@@ -2,7 +2,19 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCompass, faArrowRight } from '@fortawesome/free-solid-svg-icons';
+import {
+  faCompass,
+  faArrowRight,
+  faStar,
+  faBookmark,
+  faFire,
+  faRocket,
+  faMagnifyingGlass,
+  faChevronLeft,
+  faChevronRight,
+  faXmark,
+} from '@fortawesome/free-solid-svg-icons';
+import { ContinueReadingWidget } from './ContinueReadingWidget';
 
 export interface Series {
   id: string;
@@ -45,7 +57,7 @@ interface CatalogProps {
   loading: boolean;
   onSelectSeries: (slug: string) => void;
   latestChapters?: LatestChapter[];
-  onSelectChapter?: (chapterId: string) => void;
+  onSelectChapter?: (slug: string, chapterNumber: number, chapterId: string) => void;
   viewMode?: 'home' | 'library';
   onGoLibrary?: () => void;
 }
@@ -232,7 +244,7 @@ export const Catalog: React.FC<CatalogProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:py-8">
-      
+
       {/* Featured Manhwas Carousel Section — Home only */}
       {viewMode === 'home' && activeFeatured && (
         <div className="mb-8 glass rounded-2xl sm:rounded-3xl relative overflow-hidden shadow-[0_10px_40px_rgba(0,0,0,0.5)] border border-white/10 transition-all">
@@ -256,8 +268,9 @@ export const Catalog: React.FC<CatalogProps> = ({
             </div>
 
             <div className="flex-1 min-w-0">
-              <span className="inline-flex items-center gap-1 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black text-[10px] sm:text-xs uppercase px-2.5 py-1 rounded-full shadow-md mb-2">
-                ✨ Featured Today
+              <span className="inline-flex items-center gap-1.5 bg-gradient-to-r from-rose-500 to-red-600 text-white font-black text-[10px] sm:text-xs uppercase px-2.5 py-1 rounded-full shadow-md mb-2">
+                <FontAwesomeIcon icon={faFire} />
+                <span>Featured Today</span>
               </span>
 
               <h2 className="text-base sm:text-3xl md:text-4xl font-black text-white leading-tight line-clamp-2 mb-3 sm:mb-4">
@@ -268,32 +281,49 @@ export const Catalog: React.FC<CatalogProps> = ({
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   onClick={() => onSelectSeries(activeFeatured.slug)}
-                  className="bg-gradient-to-r from-rose-500 to-rose-600 text-white font-bold px-4 sm:px-7 py-2 sm:py-3 rounded-xl sm:rounded-2xl shadow-lg text-xs sm:text-base flex items-center gap-1.5"
+                  className="bg-gradient-to-r from-rose-500 to-rose-600 text-white font-bold px-4 sm:px-7 py-2 sm:py-3 rounded-xl sm:rounded-2xl shadow-lg text-xs sm:text-base flex items-center gap-2"
                 >
-                  🚀 Read Now
+                  <FontAwesomeIcon icon={faRocket} />
+                  <span>Read Now</span>
                 </motion.button>
 
                 {featuredSeries.length > 1 && (
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     <button
                       onClick={() => setFeaturedIndex((prev) => (prev - 1 + featuredSeries.length) % featuredSeries.length)}
-                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 border border-white/10 text-white flex items-center justify-center text-sm transition-all"
+                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 border border-white/10 text-white flex items-center justify-center text-xs transition-all"
                       aria-label="Previous"
-                    >←</button>
+                    >
+                      <FontAwesomeIcon icon={faChevronLeft} />
+                    </button>
                     <span className="text-xs text-gray-400 font-bold px-1">
                       {featuredIndex + 1}/{featuredSeries.length}
                     </span>
                     <button
                       onClick={() => setFeaturedIndex((prev) => (prev + 1) % featuredSeries.length)}
-                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 border border-white/10 text-white flex items-center justify-center text-sm transition-all"
+                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/10 border border-white/10 text-white flex items-center justify-center text-xs transition-all"
                       aria-label="Next"
-                    >→</button>
+                    >
+                      <FontAwesomeIcon icon={faChevronRight} />
+                    </button>
                   </div>
                 )}
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Continue Reading Widget — Home only, shown below the featured banner */}
+      {viewMode === 'home' && (
+        <ContinueReadingWidget
+          onResume={(slug, chapNumber, chapId) => {
+            if (onSelectChapter) {
+              onSelectChapter(slug, chapNumber, chapId);
+            }
+          }}
+          onSelectSeries={onSelectSeries}
+        />
       )}
 
       {/* Browse Page Header — Library mode only */}
@@ -318,19 +348,20 @@ export const Catalog: React.FC<CatalogProps> = ({
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
           
           <div className="relative flex-1">
+            <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm" />
             <input
               type="text"
-              placeholder="🔍 Search manhwa, manga or genre..."
+              placeholder="Search manhwa, manga or genre..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 focus:border-accent rounded-2xl px-4 py-3 text-sm text-white placeholder-gray-400 outline-none transition-all"
+              className="w-full bg-white/5 border border-white/10 focus:border-accent rounded-2xl pl-10 pr-10 py-3 text-sm text-white placeholder-gray-400 outline-none transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-white"
               >
-                ✕ Clear
+                <FontAwesomeIcon icon={faXmark} />
               </button>
             )}
           </div>
@@ -342,10 +373,10 @@ export const Catalog: React.FC<CatalogProps> = ({
               onChange={(e) => setSortBy(e.target.value as any)}
               className="bg-white/10 border border-white/15 hover:border-accent text-xs sm:text-sm font-bold text-white px-4 py-3 rounded-2xl outline-none cursor-pointer transition-all"
             >
-              <option value="update" className="bg-gray-900 text-white">🕒 Latest Updates</option>
-              <option value="chapters" className="bg-gray-900 text-white">🔥 Most Chapters</option>
-              <option value="title" className="bg-gray-900 text-white">🔤 Title (A - Z)</option>
-              <option value="year" className="bg-gray-900 text-white">📅 Release Year</option>
+              <option value="update" className="bg-gray-900 text-white">Latest Updates</option>
+              <option value="chapters" className="bg-gray-900 text-white">Most Chapters</option>
+              <option value="title" className="bg-gray-900 text-white">Title (A - Z)</option>
+              <option value="year" className="bg-gray-900 text-white">Release Year</option>
             </select>
           </div>
         </div>
@@ -380,7 +411,8 @@ export const Catalog: React.FC<CatalogProps> = ({
                 : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
             }`}
           >
-            <span>{onlyFavorites ? '★ Favorites Only (' + favorites.length + ')' : '☆ View Favorites'}</span>
+            <FontAwesomeIcon icon={faStar} className={onlyFavorites ? 'text-amber-400' : 'text-gray-400'} />
+            <span>{onlyFavorites ? 'Favorites Only (' + favorites.length + ')' : 'View Favorites'}</span>
           </button>
         </div>
 
@@ -471,20 +503,21 @@ export const Catalog: React.FC<CatalogProps> = ({
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0A0B0F] via-transparent to-transparent opacity-85" />
 
                     {/* Rating Badge */}
-                    <div className="absolute top-2 left-2 bg-black/80 text-amber-400 text-[10px] font-black px-1.5 py-0.5 rounded-lg border border-amber-400/30 flex items-center gap-0.5">
-                      <span>★</span> {getRating(item.title)}
+                    <div className="absolute top-2 left-2 bg-black/80 text-amber-400 text-[10px] font-black px-1.5 py-0.5 rounded-lg border border-amber-400/30 flex items-center gap-1">
+                      <FontAwesomeIcon icon={faStar} className="text-[9px]" />
+                      <span>{getRating(item.title)}</span>
                     </div>
 
                     {/* Bookmark Button */}
                     <button
                       onClick={(e) => toggleFavoriteCard(e, item)}
-                      className={`absolute top-2 right-2 w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl backdrop-blur-md flex items-center justify-center text-sm ${
+                      className={`absolute top-2 right-2 w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl backdrop-blur-md flex items-center justify-center text-xs transition-all ${
                         isFav
                           ? 'bg-amber-500 text-black font-bold shadow-lg'
-                          : 'bg-black/60 text-white/80 border border-white/10'
+                          : 'bg-black/60 text-white/80 border border-white/10 hover:border-accent'
                       }`}
                     >
-                      {isFav ? '★' : '☆'}
+                      <FontAwesomeIcon icon={faBookmark} />
                     </button>
 
                     {/* Chapter Count */}
@@ -509,7 +542,7 @@ export const Catalog: React.FC<CatalogProps> = ({
                               onClick={(e) => {
                                 if (onSelectChapter) {
                                   e.stopPropagation();
-                                  onSelectChapter(chap.id);
+                                  onSelectChapter(item.slug, chap.number, chap.id);
                                 }
                               }}
                               className="flex items-center justify-between gap-1.5 py-1 px-2 rounded-lg bg-white/[0.04] hover:bg-accent/20 border border-white/5 hover:border-accent/40 text-[11px] transition-all cursor-pointer group/chap"

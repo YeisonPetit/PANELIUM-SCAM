@@ -5,6 +5,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faHouse,
   faCompass,
+  faStar,
   faCloudArrowUp,
   faRightFromBracket,
   faUser,
@@ -22,6 +23,7 @@ interface NavbarProps {
   health: HealthState | null;
   onGoHome: () => void;
   onGoLibrary: () => void;
+  onGoFavorites: () => void;
   onOpenImporter: () => void;
   onOpenAuth: () => void;
   activeView: string;
@@ -31,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   health,
   onGoHome,
   onGoLibrary,
+  onGoFavorites,
   onOpenImporter,
   onOpenAuth,
   activeView,
@@ -59,6 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleGoHome = () => { setMobileMenuOpen(false); onGoHome(); };
   const handleGoLibrary = () => { setMobileMenuOpen(false); onGoLibrary(); };
+  const handleGoFavorites = () => { setMobileMenuOpen(false); onGoFavorites(); };
   const handleOpenImporter = () => { setMobileMenuOpen(false); onOpenImporter(); };
   const handleOpenAuth = () => { setMobileMenuOpen(false); onOpenAuth(); };
 
@@ -73,8 +77,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           whileTap={{ scale: 0.96 }}
           className="cursor-pointer flex items-center gap-2 shrink-0 min-w-0"
         >
-          <div className="w-7 h-7 rounded-lg overflow-hidden border border-rose-500/40 shrink-0">
-            <img src="/logo.jpg" alt="Panelium" className="w-full h-full object-cover" />
+          <div className="w-7 h-7 rounded-full overflow-hidden border border-rose-500/40 shrink-0 shadow-glow">
+            <img src="/favicon.png" alt="Panelium" className="w-full h-full object-cover" />
           </div>
           <span className="text-sm font-black tracking-tight leading-none whitespace-nowrap">
             Panelium<span className="text-accent">Scan</span>
@@ -109,6 +113,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <FontAwesomeIcon icon={faCompass} className="text-xs" />
             Browse
+          </button>
+
+          <button
+            onClick={handleGoFavorites}
+            className={`px-3.5 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+              activeView === 'favorites' ? 'bg-accent text-white shadow-glow' : 'text-gray-300 hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            <FontAwesomeIcon icon={faStar} className="text-xs text-amber-400" />
+            Favorites
           </button>
 
           {isAdmin && (
@@ -280,6 +294,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <FontAwesomeIcon icon={faCompass} className="w-4" />
                 Browse (All Comics)
+              </button>
+
+              <button
+                onClick={handleGoFavorites}
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2.5 ${
+                  activeView === 'favorites' ? 'bg-accent text-white' : 'text-gray-200'
+                }`}
+              >
+                <FontAwesomeIcon icon={faStar} className="w-4 text-amber-400" />
+                Favorites
               </button>
 
               {isAdmin && (

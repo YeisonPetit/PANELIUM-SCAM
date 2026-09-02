@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { saveProgress } from './ContinueReadingWidget';
+import { injectChapterSchema } from '../utils/schema';
 
 export interface PageData {
   id: string;
@@ -16,55 +18,189 @@ export interface ChapterData {
     id: string;
     title: string;
     slug: string;
+    cover?: string;
   };
   pages: PageData[];
   prevChapterId: string | null;
   nextChapterId: string | null;
+  prevChapterNumber?: number | null;
+  nextChapterNumber?: number | null;
 }
 
 interface WebtoonReaderProps {
-  chapterId: string;
+  slug?: string;
+  chapterNumber?: string | number;
+  chapterId?: string;
   onBackToSeries: (slug: string) => void;
-  onNavigateChapter: (chapterId: string) => void;
+  onNavigateChapter: (chapterTarget: string | number, seriesSlug?: string) => void;
+  onChapterLoaded?: (chapter: ChapterData) => void;
 }
 
+// In-memory cache across navigation for instant chapter transitions
+const chapterCache = new Map<string, ChapterData>();
+
 export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
+  slug,
+  chapterNumber,
   chapterId,
   onBackToSeries,
   onNavigateChapter,
+  onChapterLoaded,
 }) => {
   const [chapter, setChapter] = useState<ChapterData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingPages, setLoadingPages] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const prefetchTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const endpointUrl = slug && chapterNumber !== undefined
+    ? `/api/series/${encodeURIComponent(slug)}/chapters/${chapterNumber}`
+    : chapterId
+    ? `/api/chapters/${chapterId}`
+    : null;
+
+  // Preload next chapter data & images in background for 0s lag
+  const prefetchNextChapter = useCallback((currChapter: ChapterData) => {
+    if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current);
+
+    prefetchTimerRef.current = setTimeout(() => {
+      let nextUrl: string | null = null;
+      if (currChapter.series?.slug && currChapter.nextChapterNumber !== null && currChapter.nextChapterNumber !== undefined) {
+        nextUrl = `/api/series/${encodeURIComponent(currChapter.series.slug)}/chapters/${currChapter.nextChapterNumber}`;
+      } else if (currChapter.nextChapterId) {
+        nextUrl = `/api/chapters/${currChapter.nextChapterId}`;
+      }
+
+      if (!nextUrl || chapterCache.has(nextUrl)) return;
+
+      fetch(nextUrl)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((nextData: ChapterData | null) => {
+          if (!nextData || !nextUrl) return;
+          chapterCache.set(nextUrl, nextData);
+
+          // Preload first 5 image pages into browser memory cache
+          if (Array.isArray(nextData.pages)) {
+            nextData.pages.slice(0, 5).forEach((p) => {
+              if (p.imageUrl) {
+                const img = new Image();
+                img.src = p.imageUrl;
+              }
+            });
+          }
+        })
+        .catch(() => {});
+    }, 1500); // 1.5s idle delay so current page loads first
+  }, []);
 
   const fetchChapter = useCallback((isRetry = false) => {
+    if (!endpointUrl) {
+      setError('Chapter information is missing');
+      setLoading(false);
+      return;
+    }
+
+    // Check in-memory pre-loaded cache first for 0s transition
+    if (chapterCache.has(endpointUrl)) {
+      const cached = chapterCache.get(endpointUrl)!;
+      setChapter(cached);
+      setLoading(false);
+      setError(null);
+
+      if (cached.series?.title) {
+        document.title = `Ch. ${cached.number} - ${cached.series.title} | Panelium Scan`;
+      }
+
+      // Inject Schema.org JSON-LD
+      injectChapterSchema({
+        seriesTitle: cached.series?.title || 'Manhwa',
+        seriesSlug: cached.series?.slug || '',
+        seriesCover: (cached.series as any)?.cover,
+        chapterNumber: cached.number,
+        chapterTitle: cached.title,
+      });
+
+      // Save progress
+      if (cached.series?.slug) {
+        saveProgress({
+          seriesSlug: cached.series.slug,
+          seriesTitle: cached.series.title,
+          seriesCover: (cached.series as any)?.cover ?? '',
+          chapterNumber: cached.number,
+          chapterId: cached.id,
+          nextChapterNumber: cached.nextChapterNumber ?? null,
+          nextChapterId: cached.nextChapterId ?? null,
+          readAt: Date.now(),
+        });
+      }
+
+      if (onChapterLoaded) onChapterLoaded(cached);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      prefetchNextChapter(cached);
+      return;
+    }
+
     if (!isRetry) setLoading(true);
     setError(null);
 
-    fetch(`/api/chapters/${chapterId}`)
+    fetch(endpointUrl)
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load chapter content');
         return res.json();
       })
       .then((data: ChapterData) => {
+        chapterCache.set(endpointUrl, data);
         setChapter(data);
+
         if (data?.series?.title) {
-          document.title = `Cap. ${data.number} - ${data.series.title} | Panelium Scan`;
+          document.title = `Ch. ${data.number} - ${data.series.title} | Panelium Scan`;
+        }
+
+        // Inject Schema.org JSON-LD
+        injectChapterSchema({
+          seriesTitle: data.series?.title || 'Manhwa',
+          seriesSlug: data.series?.slug || '',
+          seriesCover: (data.series as any)?.cover,
+          chapterNumber: data.number,
+          chapterTitle: data.title,
+        });
+
+        // Persist reading progress for the "Continue Reading" widget
+        if (data?.series?.slug) {
+          saveProgress({
+            seriesSlug: data.series.slug,
+            seriesTitle: data.series.title,
+            seriesCover: (data.series as any)?.cover ?? '',
+            chapterNumber: data.number,
+            chapterId: data.id,
+            nextChapterNumber: data.nextChapterNumber ?? null,
+            nextChapterId: data.nextChapterId ?? null,
+            readAt: Date.now(),
+          });
+        }
+
+        if (onChapterLoaded) {
+          onChapterLoaded(data);
         }
         setLoading(false);
 
+        // Preload next chapter in background
+        prefetchNextChapter(data);
 
         // If pages are still empty while server is lazy-loading in background
         if (data.pages.length === 0) {
           setLoadingPages(true);
-          // Poll once more after 3s to let the server finish lazy loading
           setTimeout(() => {
-            fetch(`/api/chapters/${chapterId}`)
+            fetch(endpointUrl)
               .then((r) => r.json())
               .then((refreshed: ChapterData) => {
+                chapterCache.set(endpointUrl, refreshed);
                 setChapter(refreshed);
+                if (onChapterLoaded) {
+                  onChapterLoaded(refreshed);
+                }
                 setLoadingPages(false);
+                prefetchNextChapter(refreshed);
               })
               .catch(() => setLoadingPages(false));
           }, 3000);
@@ -72,17 +208,19 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
           setLoadingPages(false);
         }
 
-
         window.scrollTo({ top: 0, behavior: 'smooth' });
       })
       .catch((err) => {
         setError(err.message);
         setLoading(false);
       });
-  }, [chapterId]);
+  }, [endpointUrl, onChapterLoaded, prefetchNextChapter]);
 
   useEffect(() => {
     fetchChapter();
+    return () => {
+      if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current);
+    };
   }, [fetchChapter]);
 
   if (loading) {
@@ -183,10 +321,16 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
 
           <div className="flex items-center gap-1.5 shrink-0">
             <button
-              disabled={!chapter.prevChapterId}
-              onClick={() => chapter.prevChapterId && onNavigateChapter(chapter.prevChapterId)}
+              disabled={!chapter.prevChapterId && chapter.prevChapterNumber == null}
+              onClick={() => {
+                if (chapter.prevChapterNumber != null && chapter.series?.slug) {
+                  onNavigateChapter(chapter.prevChapterNumber, chapter.series.slug);
+                } else if (chapter.prevChapterId) {
+                  onNavigateChapter(chapter.prevChapterId);
+                }
+              }}
               className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                chapter.prevChapterId
+                chapter.prevChapterId || chapter.prevChapterNumber != null
                   ? 'bg-white/5 text-white hover:bg-accent border-white/10 hover:border-accent'
                   : 'opacity-30 border-white/5 cursor-not-allowed text-gray-500'
               }`}
@@ -195,10 +339,16 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
             </button>
 
             <button
-              disabled={!chapter.nextChapterId}
-              onClick={() => chapter.nextChapterId && onNavigateChapter(chapter.nextChapterId)}
+              disabled={!chapter.nextChapterId && chapter.nextChapterNumber == null}
+              onClick={() => {
+                if (chapter.nextChapterNumber != null && chapter.series?.slug) {
+                  onNavigateChapter(chapter.nextChapterNumber, chapter.series.slug);
+                } else if (chapter.nextChapterId) {
+                  onNavigateChapter(chapter.nextChapterId);
+                }
+              }}
               className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                chapter.nextChapterId
+                chapter.nextChapterId || chapter.nextChapterNumber != null
                   ? 'bg-accent text-white border-accent shadow-glow'
                   : 'opacity-30 border-white/5 cursor-not-allowed text-gray-500'
               }`}
@@ -260,11 +410,17 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
               ← View Series
             </button>
 
-            {chapter.nextChapterId && (
+            {(chapter.nextChapterId || chapter.nextChapterNumber != null) && (
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => onNavigateChapter(chapter.nextChapterId!)}
+                onClick={() => {
+                  if (chapter.nextChapterNumber != null && chapter.series?.slug) {
+                    onNavigateChapter(chapter.nextChapterNumber, chapter.series.slug);
+                  } else if (chapter.nextChapterId) {
+                    onNavigateChapter(chapter.nextChapterId);
+                  }
+                }}
                 className="bg-accent hover:bg-accent/80 text-white font-bold px-6 py-2.5 rounded-2xl shadow-glow transition-all text-sm flex items-center gap-2"
               >
                 <span>Next Chapter</span>

@@ -6,6 +6,7 @@ import { Catalog, Series } from './components/Catalog';
 import { SeriesDetail, SeriesDetailData } from './components/SeriesDetail';
 import { WebtoonReader } from './components/WebtoonReader';
 import { MangaDexImporter } from './components/MangaDexImporter';
+import { FavoritesView } from './components/FavoritesView';
 import { AuthModal } from './components/AuthModal';
 import { NotFound } from './components/NotFound';
 
@@ -18,7 +19,7 @@ function SeriesDetailPage({
 }: {
   readChapters: string[];
   seriesList: Series[];
-  onSelectChapter: (chapterId: string) => void;
+  onSelectChapter: (chapterId: string, chapterNumber: number) => void;
 }) {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -48,9 +49,9 @@ function SeriesDetailPage({
       series={seriesData}
       loading={loading}
       onBack={() => navigate('/')}
-      onSelectChapter={(chapId) => {
-        onSelectChapter(chapId);
-        navigate(`/chapter/${chapId}`);
+      onSelectChapter={(chapId, chapNumber) => {
+        onSelectChapter(chapId, chapNumber);
+        navigate(`/${slug}/chapter/${chapNumber}`);
       }}
       readChapters={readChapters}
       allSeries={seriesList}
@@ -64,18 +65,30 @@ function WebtoonReaderPage({
 }: {
   onSelectChapter: (chapterId: string) => void;
 }) {
-  const { chapterId } = useParams<{ chapterId: string }>();
+  const { slug, chapterNumber, chapterId } = useParams<{
+    slug?: string;
+    chapterNumber?: string;
+    chapterId?: string;
+  }>();
   const navigate = useNavigate();
-
-  if (!chapterId) return null;
 
   return (
     <WebtoonReader
+      slug={slug}
+      chapterNumber={chapterNumber}
       chapterId={chapterId}
-      onBackToSeries={(slug) => navigate(`/series/${slug}`)}
-      onNavigateChapter={(nextChapId) => {
-        onSelectChapter(nextChapId);
-        navigate(`/chapter/${nextChapId}`);
+      onBackToSeries={(seriesSlug) => navigate(`/series/${seriesSlug}`)}
+      onNavigateChapter={(nextTarget, seriesSlug) => {
+        if (seriesSlug) {
+          navigate(`/${seriesSlug}/chapter/${nextTarget}`);
+        } else {
+          navigate(`/chapter/${nextTarget}`);
+        }
+      }}
+      onChapterLoaded={(loadedChapter) => {
+        if (loadedChapter?.id) {
+          onSelectChapter(loadedChapter.id);
+        }
       }}
     />
   );
@@ -102,23 +115,33 @@ function AppContent() {
 
   // Calculate active view based on URL route
   const getActiveView = () => {
+    if (location.pathname.includes('/chapter/')) return 'reader';
     if (location.pathname.startsWith('/series/')) return 'detail';
-    if (location.pathname.startsWith('/chapter/')) return 'reader';
+    if (location.pathname === '/favorites') return 'favorites';
     if (location.pathname === '/importer') return 'importer';
     if (location.pathname === '/library') return 'library';
     return 'home';
   };
 
-  // Sync document title on primary route transitions
+  // Sync document title & Google Analytics on route transitions
   useEffect(() => {
     if (location.pathname === '/') {
       document.title = 'Panelium Scan - Read Manhwa, Manga & Webtoons Online Free';
     } else if (location.pathname === '/library') {
       document.title = 'Comics Library | Panelium Scan';
+    } else if (location.pathname === '/favorites') {
+      document.title = 'My Favorites | Panelium Scan';
     } else if (location.pathname === '/importer') {
       document.title = 'Import Comics | Panelium Scan';
     }
-  }, [location.pathname]);
+
+    // Google Analytics 4 pageview tracking for SPA navigation
+    if (typeof (window as any).gtag === 'function') {
+      (window as any).gtag('config', 'G-ZD9X150ZL3', {
+        page_path: location.pathname + location.search,
+      });
+    }
+  }, [location.pathname, location.search]);
 
   // Poll API health endpoint
   useEffect(() => {
@@ -213,6 +236,10 @@ function AppContent() {
     navigate('/library');
   };
 
+  const handleGoFavorites = () => {
+    navigate('/favorites');
+  };
+
   const handleOpenImporter = () => {
     navigate('/importer');
   };
@@ -238,6 +265,7 @@ function AppContent() {
           health={health}
           onGoHome={handleGoHome}
           onGoLibrary={handleGoLibrary}
+          onGoFavorites={handleGoFavorites}
           onOpenImporter={handleOpenImporter}
           onOpenAuth={() => setIsAuthModalOpen(true)}
           activeView={currentView}
@@ -259,9 +287,9 @@ function AppContent() {
               loading={loading}
               onSelectSeries={(slug) => navigate(`/series/${slug}`)}
               latestChapters={latestChapters}
-              onSelectChapter={(chapId) => {
+              onSelectChapter={(seriesSlug, chapNumber, chapId) => {
                 handleSelectChapter(chapId);
-                navigate(`/chapter/${chapId}`);
+                navigate(`/${seriesSlug}/chapter/${chapNumber}`);
               }}
               viewMode="home"
               onGoLibrary={handleGoLibrary}
@@ -277,11 +305,27 @@ function AppContent() {
               loading={loading}
               onSelectSeries={(slug) => navigate(`/series/${slug}`)}
               latestChapters={latestChapters}
-              onSelectChapter={(chapId) => {
+              onSelectChapter={(seriesSlug, chapNumber, chapId) => {
                 handleSelectChapter(chapId);
-                navigate(`/chapter/${chapId}`);
+                navigate(`/${seriesSlug}/chapter/${chapNumber}`);
               }}
               viewMode="library"
+            />
+          }
+        />
+
+        <Route
+          path="/favorites"
+          element={
+            <FavoritesView
+              seriesList={seriesList}
+              loading={loading}
+              onSelectSeries={(slug) => navigate(`/series/${slug}`)}
+              onSelectChapter={(seriesSlug, chapNumber, chapId) => {
+                handleSelectChapter(chapId);
+                navigate(`/${seriesSlug}/chapter/${chapNumber}`);
+              }}
+              onGoExplore={handleGoLibrary}
             />
           }
         />
@@ -295,6 +339,23 @@ function AppContent() {
               onSelectChapter={handleSelectChapter}
             />
           }
+        />
+
+        {/* Both canonical routes supported: /series/:slug/chapter/:chapterNumber and /:slug/chapter/:chapterNumber */}
+        <Route
+          path="/series/:slug/chapter/:chapterNumber"
+          element={<WebtoonReaderPage onSelectChapter={handleSelectChapter} />}
+        />
+
+        <Route
+          path="/:slug/chapter/:chapterNumber"
+          element={<WebtoonReaderPage onSelectChapter={handleSelectChapter} />}
+        />
+
+        {/* Legacy ID route */}
+        <Route
+          path="/chapter/:chapterId"
+          element={<WebtoonReaderPage onSelectChapter={handleSelectChapter} />}
         />
 
         {/* Protected Importer Route: Admin Only */}
@@ -331,11 +392,6 @@ function AppContent() {
               </div>
             )
           }
-        />
-
-        <Route
-          path="/chapter/:chapterId"
-          element={<WebtoonReaderPage onSelectChapter={handleSelectChapter} />}
         />
 
         <Route

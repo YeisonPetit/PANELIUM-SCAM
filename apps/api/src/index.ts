@@ -653,77 +653,26 @@ app.get('/api/chapters/latest', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/chapters/:id - Get chapter pages for reading
-app.get('/api/chapters/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    let chapter = await prisma.chapter.findUnique({
-      where: { id },
-      include: {
-        series: {
-          select: { id: true, title: true, slug: true },
-        },
-        pages: {
-          orderBy: { pageNumber: 'asc' },
-        },
-      },
-    });
+// Helper to process chapter pages lazy loading and navigation
+async function resolveChapterData(rawChapter: any) {
+  let chapter = rawChapter;
 
-    if (!chapter) {
-      return res.status(404).json({ error: 'Chapter not found' });
-    }
+  // Lazy load pages from MangaDex
+  if (chapter.pages.length === 0 && chapter.mangadexId) {
+    try {
+      console.log(`Lazy loading pages from MangaDex for chapter ID ${chapter.id} (mangadexId: ${chapter.mangadexId})...`);
+      const atHomeRes = await fetch(`https://api.mangadex.org/at-home/server/${chapter.mangadexId}`);
+      if (atHomeRes.ok) {
+        const atHomeJson = await atHomeRes.json();
+        const baseUrl = atHomeJson.baseUrl;
+        const hash = atHomeJson.chapter?.hash;
+        const pageFiles = atHomeJson.chapter?.data || [];
 
-    // Lazy load pages from MangaDex
-    if (chapter.pages.length === 0 && chapter.mangadexId) {
-      try {
-        console.log(`Lazy loading pages from MangaDex for chapter ID ${chapter.id} (mangadexId: ${chapter.mangadexId})...`);
-        const atHomeRes = await fetch(`https://api.mangadex.org/at-home/server/${chapter.mangadexId}`);
-        if (atHomeRes.ok) {
-          const atHomeJson = await atHomeRes.json();
-          const baseUrl = atHomeJson.baseUrl;
-          const hash = atHomeJson.chapter?.hash;
-          const pageFiles = atHomeJson.chapter?.data || [];
-
-          if (baseUrl && hash && pageFiles.length > 0) {
-            const pagesData = pageFiles.map((f: string, idx: number) => ({
-              chapterId: chapter!.id,
-              pageNumber: idx + 1,
-              imageUrl: `${baseUrl}/data/${hash}/${f}`,
-              width: 800,
-              height: 1200,
-            }));
-
-            // Bulk insert pages
-            await prisma.page.createMany({
-              data: pagesData,
-            });
-
-            // Reload chapter with pages
-            chapter = await prisma.chapter.findUnique({
-              where: { id },
-              include: {
-                series: { select: { id: true, title: true, slug: true } },
-                pages: { orderBy: { pageNumber: 'asc' } },
-              },
-            }) || chapter;
-          }
-        }
-      } catch (err) {
-        console.error('Failed to lazy load pages from MangaDex:', err);
-      }
-    } else if (chapter.pages.length === 0 && chapter.sourceUrl && !chapter.sourceUrl.includes('manganato')) {
-      // Lazy load pages from WeebCentral (assuming sourceUrl is the chapter ID for WeebCentral)
-      try {
-        console.log(`Lazy loading pages from WeebCentral for chapter ID ${chapter.id} (url: ${chapter.sourceUrl})...`);
-        const { getWeebCentralChapterPages } = await import('./lib/weebcentral');
-        const pageUrls = await getWeebCentralChapterPages(chapter.sourceUrl);
-
-        if (pageUrls.length > 0) {
-          const pagesData = pageUrls.map((p, idx: number) => ({
+        if (baseUrl && hash && pageFiles.length > 0) {
+          const pagesData = pageFiles.map((f: string, idx: number) => ({
             chapterId: chapter!.id,
             pageNumber: idx + 1,
-            // Proxy the image URL to bypass referer blocks
-            imageUrl: `/api/proxy-image?url=${encodeURIComponent(p.url)}&referer=${encodeURIComponent(p.referer)}`,
+            imageUrl: `${baseUrl}/data/${hash}/${f}`,
             width: 800,
             height: 1200,
           }));
@@ -735,34 +684,143 @@ app.get('/api/chapters/:id', async (req: Request, res: Response) => {
 
           // Reload chapter with pages
           chapter = await prisma.chapter.findUnique({
-            where: { id },
+            where: { id: chapter.id },
             include: {
-              series: { select: { id: true, title: true, slug: true } },
+              series: { select: { id: true, title: true, slug: true, cover: true } },
               pages: { orderBy: { pageNumber: 'asc' } },
             },
           }) || chapter;
         }
-      } catch (err) {
-        console.error('Failed to lazy load pages from WeebCentral:', err);
       }
+    } catch (err) {
+      console.error('Failed to lazy load pages from MangaDex:', err);
+    }
+  } else if (chapter.pages.length === 0 && chapter.sourceUrl && !chapter.sourceUrl.includes('manganato')) {
+    // Lazy load pages from WeebCentral (assuming sourceUrl is the chapter ID for WeebCentral)
+    try {
+      console.log(`Lazy loading pages from WeebCentral for chapter ID ${chapter.id} (url: ${chapter.sourceUrl})...`);
+      const { getWeebCentralChapterPages } = await import('./lib/weebcentral');
+      const pageUrls = await getWeebCentralChapterPages(chapter.sourceUrl);
+
+      if (pageUrls.length > 0) {
+        const pagesData = pageUrls.map((p, idx: number) => ({
+          chapterId: chapter!.id,
+          pageNumber: idx + 1,
+          // Proxy the image URL to bypass referer blocks
+          imageUrl: `/api/proxy-image?url=${encodeURIComponent(p.url)}&referer=${encodeURIComponent(p.referer)}`,
+          width: 800,
+          height: 1200,
+        }));
+
+        // Bulk insert pages
+        await prisma.page.createMany({
+          data: pagesData,
+        });
+
+        // Reload chapter with pages
+        chapter = await prisma.chapter.findUnique({
+          where: { id: chapter.id },
+          include: {
+            series: { select: { id: true, title: true, slug: true, cover: true } },
+            pages: { orderBy: { pageNumber: 'asc' } },
+          },
+        }) || chapter;
+      }
+    } catch (err) {
+      console.error('Failed to lazy load pages from WeebCentral:', err);
+    }
+  }
+
+  const allChapters = await prisma.chapter.findMany({
+    where: { seriesId: chapter.seriesId },
+    select: { id: true, number: true },
+    orderBy: { number: 'asc' },
+  });
+
+  type ChapterSimple = (typeof allChapters)[number];
+  const currentIndex = allChapters.findIndex((c: ChapterSimple) => c.id === chapter!.id);
+  const prevChapter = currentIndex > 0 ? allChapters[currentIndex - 1] : null;
+  const nextChapter = currentIndex < allChapters.length - 1 ? allChapters[currentIndex + 1] : null;
+
+  return {
+    ...chapter,
+    prevChapterId: prevChapter?.id || null,
+    nextChapterId: nextChapter?.id || null,
+    prevChapterNumber: prevChapter ? prevChapter.number : null,
+    nextChapterNumber: nextChapter ? nextChapter.number : null,
+  };
+}
+
+// GET /api/series/:slug/chapters/:chapterNumber - Get chapter by series slug and chapter number
+app.get('/api/series/:slug/chapters/:chapterNumber', async (req: Request, res: Response) => {
+  try {
+    const { slug, chapterNumber } = req.params;
+    const num = parseFloat(chapterNumber);
+
+    if (isNaN(num)) {
+      return res.status(400).json({ error: 'Invalid chapter number parameter' });
     }
 
-    const allChapters = await prisma.chapter.findMany({
-      where: { seriesId: chapter.seriesId },
-      select: { id: true, number: true },
-      orderBy: { number: 'asc' },
+    const series = await prisma.series.findFirst({
+      where: {
+        OR: [{ slug }, { id: slug }],
+      },
+      select: { id: true },
     });
 
-    type ChapterSimple = (typeof allChapters)[number];
-    const currentIndex = allChapters.findIndex((c: ChapterSimple) => c.id === chapter!.id);
-    const prevChapter = currentIndex > 0 ? allChapters[currentIndex - 1] : null;
-    const nextChapter = currentIndex < allChapters.length - 1 ? allChapters[currentIndex + 1] : null;
+    if (!series) {
+      return res.status(404).json({ error: 'Series not found' });
+    }
 
-    return res.json({
-      ...chapter,
-      prevChapterId: prevChapter?.id || null,
-      nextChapterId: nextChapter?.id || null,
+    const chapter = await prisma.chapter.findFirst({
+      where: {
+        seriesId: series.id,
+        number: num,
+      },
+      include: {
+        series: {
+          select: { id: true, title: true, slug: true, cover: true },
+        },
+        pages: {
+          orderBy: { pageNumber: 'asc' },
+        },
+      },
     });
+
+    if (!chapter) {
+      return res.status(404).json({ error: 'Chapter not found' });
+    }
+
+    const result = await resolveChapterData(chapter);
+    return res.json(result);
+  } catch (error) {
+    console.error('Error fetching chapter by series and number:', error);
+    return res.status(500).json({ error: 'Failed to fetch chapter' });
+  }
+});
+
+// GET /api/chapters/:id - Get chapter pages for reading by ID
+app.get('/api/chapters/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const chapter = await prisma.chapter.findUnique({
+      where: { id },
+      include: {
+        series: {
+          select: { id: true, title: true, slug: true, cover: true },
+        },
+        pages: {
+          orderBy: { pageNumber: 'asc' },
+        },
+      },
+    });
+
+    if (!chapter) {
+      return res.status(404).json({ error: 'Chapter not found' });
+    }
+
+    const result = await resolveChapterData(chapter);
+    return res.json(result);
   } catch (error) {
     console.error('Error fetching chapter:', error);
     return res.status(500).json({ error: 'Failed to fetch chapter' });
@@ -1000,27 +1058,180 @@ app.get('/api/proxy-image', async (req: Request, res: Response) => {
 });
 
 
+// ─── Dynamic Open Graph Prerender Endpoints ──────────────────────────────────
+// These routes serve minimal HTML with correct OG tags for social media bots.
+// nginx routes bot user-agents (WhatsApp, Telegram, etc.) here instead of the SPA.
+
+const SITE_URL = 'https://paneliumscan.com';
+const SITE_NAME = 'Panelium Scan';
+const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpg`;
+
+function buildOgHtml(opts: {
+  title: string;
+  description: string;
+  image: string;
+  url: string;
+  type?: string;
+}): string {
+  const { title, description, image, url, type = 'website' } = opts;
+  const escapedTitle = title.replace(/"/g, '&quot;');
+  const escapedDesc = description.replace(/"/g, '&quot;').slice(0, 300);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapedTitle} | ${SITE_NAME}</title>
+  <meta name="description" content="${escapedDesc}" />
+  <meta property="og:type" content="${type}" />
+  <meta property="og:url" content="${url}" />
+  <meta property="og:site_name" content="${SITE_NAME}" />
+  <meta property="og:title" content="${escapedTitle} | ${SITE_NAME}" />
+  <meta property="og:description" content="${escapedDesc}" />
+  <meta property="og:image" content="${image}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapedTitle} | ${SITE_NAME}" />
+  <meta name="twitter:description" content="${escapedDesc}" />
+  <meta name="twitter:image" content="${image}" />
+  <meta http-equiv="refresh" content="0;url=${url}" />
+</head>
+<body>
+  <p>Redirecting to <a href="${url}">${escapedTitle}</a>...</p>
+</body>
+</html>`;
+}
+
+// GET /prerender/series/:slug — OG page for series detail
+app.get('/prerender/series/:slug', async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const series = await prisma.series.findUnique({
+      where: { slug },
+      select: { title: true, description: true, cover: true, slug: true },
+    });
+
+    if (!series) {
+      return res.status(404).send(buildOgHtml({
+        title: 'Series Not Found',
+        description: 'The requested series could not be found.',
+        image: DEFAULT_OG_IMAGE,
+        url: SITE_URL,
+      }));
+    }
+
+    const url = `${SITE_URL}/series/${series.slug}`;
+    const image = series.cover || DEFAULT_OG_IMAGE;
+    return res.send(buildOgHtml({
+      title: series.title,
+      description: series.description,
+      image,
+      url,
+      type: 'book',
+    }));
+  } catch (error) {
+    console.error('OG prerender series error:', error);
+    return res.status(500).send('Error generating preview');
+  }
+});
+
+// GET /prerender/:slug/chapter/:number — OG page for a chapter
+app.get('/prerender/:slug/chapter/:number', async (req: Request, res: Response) => {
+  try {
+    const { slug, number } = req.params;
+    const num = parseFloat(number);
+
+    const series = await prisma.series.findFirst({
+      where: { OR: [{ slug }, { id: slug }] },
+      select: { id: true, title: true, cover: true, slug: true },
+    });
+
+    if (!series || isNaN(num)) {
+      return res.status(404).send(buildOgHtml({
+        title: 'Chapter Not Found',
+        description: 'The requested chapter could not be found.',
+        image: DEFAULT_OG_IMAGE,
+        url: SITE_URL,
+      }));
+    }
+
+    const chapter = await prisma.chapter.findFirst({
+      where: { seriesId: series.id, number: num },
+      select: { number: true, title: true },
+    });
+
+    const chapterLabel = chapter?.title
+      ? `Chapter ${num}: ${chapter.title}`
+      : `Chapter ${num}`;
+
+    const url = `${SITE_URL}/${series.slug}/chapter/${num}`;
+    const image = series.cover || DEFAULT_OG_IMAGE;
+    return res.send(buildOgHtml({
+      title: `${series.title} — ${chapterLabel}`,
+      description: `Read ${series.title} Chapter ${num} online for free on Panelium Scan. High quality manhwa and manga reader.`,
+      image,
+      url,
+      type: 'article',
+    }));
+  } catch (error) {
+    console.error('OG prerender chapter error:', error);
+    return res.status(500).send('Error generating preview');
+  }
+});
+
 // GET /sitemap.xml - Dynamic XML sitemap for SEO crawlers
 app.get('/sitemap.xml', async (req: Request, res: Response) => {
   try {
     const series = await prisma.series.findMany({
-      select: { slug: true, createdAt: true },
+      select: {
+        slug: true,
+        createdAt: true,
+        chapters: {
+          select: { number: true, createdAt: true },
+          orderBy: { number: 'asc' },
+        },
+      },
     });
 
-    const host = req.get('host') || 'localhost:4000';
-    const protocol = req.protocol || 'http';
+    const host = req.get('x-forwarded-host') || req.get('host') || 'paneliumscan.com';
+    const protocol = req.get('x-forwarded-proto') || req.protocol || 'https';
+    const base = `${protocol}://${host}`;
 
     let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
     xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
-    xml += `  <url>\n    <loc>${protocol}://${host}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+
+    // Homepage
+    xml += `  <url>\n    <loc>${base}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+    // Library
+    xml += `  <url>\n    <loc>${base}/library</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
 
     for (const s of series) {
-      xml += `  <url>\n    <loc>${protocol}://${host}/series/${s.slug}</loc>\n    <lastmod>${s.createdAt.toISOString().split('T')[0]}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+      const seriesLastmod = s.createdAt.toISOString().split('T')[0];
+
+      // Series detail page
+      xml += `  <url>\n`;
+      xml += `    <loc>${base}/series/${s.slug}</loc>\n`;
+      xml += `    <lastmod>${seriesLastmod}</lastmod>\n`;
+      xml += `    <changefreq>weekly</changefreq>\n`;
+      xml += `    <priority>0.8</priority>\n`;
+      xml += `  </url>\n`;
+
+      // Each chapter page (canonical slug-based URL)
+      for (const ch of s.chapters) {
+        const chapLastmod = ch.createdAt.toISOString().split('T')[0];
+        xml += `  <url>\n`;
+        xml += `    <loc>${base}/${s.slug}/chapter/${ch.number}</loc>\n`;
+        xml += `    <lastmod>${chapLastmod}</lastmod>\n`;
+        xml += `    <changefreq>monthly</changefreq>\n`;
+        xml += `    <priority>0.6</priority>\n`;
+        xml += `  </url>\n`;
+      }
     }
 
     xml += `</urlset>`;
 
     res.header('Content-Type', 'application/xml');
+    res.header('Cache-Control', 'public, max-age=3600'); // Cache 1h in CDN/proxy
     return res.send(xml);
   } catch (error) {
     console.error('Error generating sitemap:', error);

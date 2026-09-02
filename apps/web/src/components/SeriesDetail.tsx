@@ -1,17 +1,35 @@
 import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Series } from './Catalog';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faArrowLeft,
+  faStar,
+  faBookmark,
+  faBolt,
+  faRocket,
+  faFire,
+  faChevronDown,
+  faChevronUp,
+  faChevronLeft,
+  faChevronRight,
+  faArrowUpWideShort,
+  faArrowDownWideShort,
+  faCheck,
+} from '@fortawesome/free-solid-svg-icons';
+import { injectSeriesSchema } from '../utils/schema';
 
 function timeAgo(dateStr?: string): string {
   if (!dateStr) return '';
   const now = Date.now();
   const then = new Date(dateStr).getTime();
   const diff = Math.floor((now - then) / 1000);
-  if (diff < 60) return `hace ${diff}s`;
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`;
-  if (diff < 2592000) return `hace ${Math.floor(diff / 86400)}d`;
-  return `hace ${Math.floor(diff / 2592000)} mes${Math.floor(diff / 2592000) > 1 ? 'es' : ''}`;
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 2592000) return `${Math.floor(diff / 86400)}d ago`;
+  const months = Math.floor(diff / 2592000);
+  return `${months} mo${months > 1 ? 's' : ''} ago`;
 }
 
 export interface ChapterSummary {
@@ -42,7 +60,7 @@ interface SeriesDetailProps {
   series: SeriesDetailData | null;
   loading: boolean;
   onBack: () => void;
-  onSelectChapter: (chapterId: string) => void;
+  onSelectChapter: (chapterId: string, chapterNumber: number) => void;
   readChapters?: string[];
   allSeries?: Series[];
   onSelectSeries?: (slug: string) => void;
@@ -73,6 +91,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
 
   React.useEffect(() => {
     if (!series) return;
+    injectSeriesSchema(series);
     try {
       const favs = JSON.parse(localStorage.getItem('favorite-series') || '[]');
       setIsBookmarked(favs.includes(series.id) || favs.includes(series.slug));
@@ -157,7 +176,8 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
         onClick={onBack}
         className="mb-6 flex items-center gap-2 text-sm text-gray-300 hover:text-white transition-all bg-white/5 hover:bg-accent/20 px-4 py-2.5 rounded-2xl border border-white/10 hover:border-accent/40 shadow-sm"
       >
-        <span className="text-accent font-bold">←</span> Back to Catalog
+        <FontAwesomeIcon icon={faArrowLeft} className="text-accent" />
+        <span>Back to Catalog</span>
       </button>
 
       {/* Hero Banner Section */}
@@ -193,11 +213,13 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
             
             {/* Top Badges Row */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-4">
-              <span className="bg-gradient-to-r from-rose-500 to-red-600 text-white font-black text-xs uppercase px-3.5 py-1.5 rounded-full shadow-md flex items-center gap-1">
-                ✨ FEATURED SERIES
+              <span className="bg-gradient-to-r from-rose-500 to-red-600 text-white font-black text-xs uppercase px-3.5 py-1.5 rounded-full shadow-md flex items-center gap-1.5">
+                <FontAwesomeIcon icon={faFire} />
+                <span>FEATURED SERIES</span>
               </span>
-              <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold text-xs px-3 py-1.5 rounded-full flex items-center gap-1">
-                ★ {getRating(series.title)}
+              <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                <FontAwesomeIcon icon={faStar} className="text-amber-400 text-xs" />
+                <span>{getRating(series.title)}</span>
               </span>
               <span className="bg-white/10 text-white font-semibold text-xs px-3 py-1.5 rounded-full border border-white/10">
                 {series.type}
@@ -226,9 +248,10 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
               {series.description && series.description.length > 180 && (
                 <button
                   onClick={() => setDescExpanded(!descExpanded)}
-                  className="mt-1 text-xs text-accent hover:text-rose-300 font-semibold transition-colors"
+                  className="mt-1 text-xs text-accent hover:text-rose-300 font-semibold transition-colors flex items-center gap-1 inline-flex"
                 >
-                  {descExpanded ? '▲ View less' : '▼ View more'}
+                  <FontAwesomeIcon icon={descExpanded ? faChevronUp : faChevronDown} className="text-[10px]" />
+                  <span>{descExpanded ? 'View less' : 'View more'}</span>
                 </button>
               )}
             </div>
@@ -263,10 +286,11 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                 <motion.button
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.96 }}
-                  onClick={() => onSelectChapter(series.chapters[0].id)}
+                  onClick={() => onSelectChapter(series.chapters[0].id, series.chapters[0].number)}
                   className="bg-gradient-to-r from-rose-500 via-red-500 to-rose-600 hover:from-rose-600 hover:to-red-700 text-white font-bold px-7 py-3 rounded-2xl shadow-lg transition-all flex items-center gap-2 text-sm sm:text-base"
                 >
-                  <span>🚀 Read Series Now (Ch. 1)</span>
+                  <FontAwesomeIcon icon={faRocket} />
+                  <span>Read Series Now (Ch. 1)</span>
                 </motion.button>
               )}
 
@@ -274,10 +298,11 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                 <motion.button
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => onSelectChapter(series.chapters[series.chapters.length - 1].id)}
-                  className="bg-white/10 hover:bg-white/20 text-white font-semibold px-5 py-3 rounded-2xl border border-white/10 transition-all text-sm"
+                  onClick={() => onSelectChapter(series.chapters[series.chapters.length - 1].id, series.chapters[series.chapters.length - 1].number)}
+                  className="bg-white/10 hover:bg-white/20 text-white font-semibold px-5 py-3 rounded-2xl border border-white/10 transition-all text-sm flex items-center gap-2"
                 >
-                  <span>⚡ Latest Ch. ({series.chapters[series.chapters.length - 1].number})</span>
+                  <FontAwesomeIcon icon={faBolt} className="text-amber-400" />
+                  <span>Latest Ch. ({series.chapters[series.chapters.length - 1].number})</span>
                 </motion.button>
               )}
 
@@ -289,7 +314,8 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                     : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
                 }`}
               >
-                <span>{isBookmarked ? '★ Saved to Bookmarks' : '☆ Add to Bookmarks'}</span>
+                <FontAwesomeIcon icon={faBookmark} className={isBookmarked ? 'text-amber-400' : 'text-gray-400'} />
+                <span>{isBookmarked ? 'Saved to Bookmarks' : 'Add to Bookmarks'}</span>
               </button>
             </div>
 
@@ -335,7 +361,8 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
               onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
               className="bg-white/5 hover:bg-white/10 text-xs font-semibold text-gray-300 border border-white/10 px-3.5 py-2.5 rounded-xl transition-all shrink-0 flex items-center gap-1.5"
             >
-              <span>{sortOrder === 'asc' ? 'Order: Asc ⬆️' : 'Order: Desc ⬇️'}</span>
+              <FontAwesomeIcon icon={sortOrder === 'asc' ? faArrowUpWideShort : faArrowDownWideShort} />
+              <span>{sortOrder === 'asc' ? 'Order: Asc' : 'Order: Desc'}</span>
             </button>
           </div>
         </div>
@@ -353,7 +380,7 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                 <motion.div
                   key={chap.id}
                   whileHover={{ x: 4 }}
-                  onClick={() => onSelectChapter(chap.id)}
+                  onClick={() => onSelectChapter(chap.id, chap.number)}
                   className={`cursor-pointer p-4 rounded-2xl border flex items-center justify-between transition-all group ${
                     isRead
                       ? 'bg-white/[0.01] border-white/5 opacity-65 hover:opacity-100 hover:border-accent/40'
@@ -391,13 +418,20 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
                   </div>
 
                   <span
-                    className={`font-bold text-xs px-3.5 py-1.5 rounded-xl border transition-all shrink-0 ${
+                    className={`font-bold text-xs px-3.5 py-1.5 rounded-xl border transition-all shrink-0 flex items-center gap-1.5 ${
                       isRead
                         ? 'bg-white/5 text-gray-400 border-white/10 group-hover:bg-accent group-hover:text-white group-hover:border-accent'
                         : 'bg-accent/20 text-accent border-accent/30 group-hover:bg-accent group-hover:text-white'
                     }`}
                   >
-                    {isRead ? 'Read ✓' : 'Read →'}
+                    {isRead ? (
+                      <>
+                        <FontAwesomeIcon icon={faCheck} className="text-[10px]" />
+                        <span>Read</span>
+                      </>
+                    ) : (
+                      'Read →'
+                    )}
                   </span>
                 </motion.div>
               );
@@ -413,7 +447,8 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-2xl font-black text-white flex items-center gap-2">
-                <span>🔥 Recommended & Similar Series</span>
+                <FontAwesomeIcon icon={faFire} className="text-accent" />
+                <span>Recommended & Similar Series</span>
               </h3>
               <p className="text-xs text-gray-400 mt-1">
                 Popular titles with matching genres that you might enjoy
@@ -424,17 +459,17 @@ export const SeriesDetail: React.FC<SeriesDetailProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={() => scrollCarousel('left')}
-                className="w-10 h-10 rounded-full bg-white/5 hover:bg-accent/30 border border-white/10 text-white flex items-center justify-center transition-all"
+                className="w-10 h-10 rounded-full bg-white/5 hover:bg-accent/30 border border-white/10 text-white flex items-center justify-center transition-all text-xs"
                 aria-label="Scroll left"
               >
-                ←
+                <FontAwesomeIcon icon={faChevronLeft} />
               </button>
               <button
                 onClick={() => scrollCarousel('right')}
-                className="w-10 h-10 rounded-full bg-white/5 hover:bg-accent/30 border border-white/10 text-white flex items-center justify-center transition-all"
+                className="w-10 h-10 rounded-full bg-white/5 hover:bg-accent/30 border border-white/10 text-white flex items-center justify-center transition-all text-xs"
                 aria-label="Scroll right"
               >
-                →
+                <FontAwesomeIcon icon={faChevronRight} />
               </button>
             </div>
           </div>
