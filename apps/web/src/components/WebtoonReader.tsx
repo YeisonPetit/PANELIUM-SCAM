@@ -40,6 +40,95 @@ interface WebtoonReaderProps {
 // In-memory cache across navigation for instant chapter transitions
 const chapterCache = new Map<string, ChapterData>();
 
+interface WebtoonPageItemProps {
+  page: PageData;
+  index: number;
+  onFirstPagesLoaded?: () => void;
+}
+
+const WebtoonPageItem: React.FC<WebtoonPageItemProps> = ({
+  page,
+  index,
+  onFirstPagesLoaded,
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Pages 0 and 1 start loading immediately; rest load as user approaches
+  const [shouldLoad, setShouldLoad] = useState<boolean>(index < 2);
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (shouldLoad) return;
+
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry && entry.isIntersecting) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      {
+        // 800px buffer: loads 1-2 screen heights before entering view
+        rootMargin: '800px 0px',
+      }
+    );
+
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [shouldLoad]);
+
+  return (
+    <div
+      ref={containerRef}
+      className="w-full relative shadow-2xl overflow-hidden rounded-lg bg-white/[0.02] border border-white/5 min-h-[480px] sm:min-h-[720px] flex items-center justify-center"
+    >
+      {/* Subtle loading spinner placeholder while image is downloading */}
+      {!isLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white/20 select-none">
+          <div className="w-6 h-6 border-2 border-white/20 border-t-accent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {shouldLoad && (
+        <img
+          src={page.imageUrl}
+          alt=""
+          loading={index < 2 ? 'eager' : 'lazy'}
+          decoding="async"
+          referrerPolicy="no-referrer"
+          className={`relative z-10 w-full h-auto object-contain block mx-auto transition-opacity duration-300 ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          onLoad={() => {
+            setIsLoaded(true);
+            if (index < 2 && onFirstPagesLoaded) {
+              onFirstPagesLoaded();
+            }
+          }}
+          onError={(e) => {
+            const img = e.target as HTMLImageElement;
+            const retries = parseInt(img.dataset.retries || '0', 10);
+            if (retries < 3) {
+              img.dataset.retries = String(retries + 1);
+              setTimeout(() => {
+                img.src = `${page.imageUrl}&_retry=${Date.now()}`;
+              }, 1500 * (retries + 1));
+            } else {
+              img.style.opacity = '0.3';
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
 export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
   slug,
   chapterNumber,
@@ -51,6 +140,7 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
   const [chapter, setChapter] = useState<ChapterData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingPages, setLoadingPages] = useState<boolean>(false);
+  const [isChapterReady, setIsChapterReady] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const prefetchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const onChapterLoadedRef = useRef(onChapterLoaded);
@@ -235,6 +325,19 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
     };
   }, [endpointUrl, fetchChapter]);
 
+  // Ensure ads and end components only load once the chapter has settled
+  useEffect(() => {
+    setIsChapterReady(false);
+    if (!chapter || chapter.pages.length === 0) return;
+
+    // Safety fallback: activate ads after 3.5s if images take longer to emit onload
+    const timer = setTimeout(() => {
+      setIsChapterReady(true);
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, [chapter?.id]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
@@ -327,7 +430,7 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
               {chapter.title || `Ch. ${chapter.number}`}
             </h2>
             <span className="text-[10px] text-accent font-medium hidden sm:block">
-              {chapter.pages.length} pages • Webtoon Scroll
+              Webtoon Scroll
             </span>
           </div>
 
@@ -371,41 +474,20 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
         </div>
       </header>
 
-      {/* Main Webtoon Vertical Page Stream */}
+      {/* Main Webtoon Vertical Page Stream with Smart 2-Page Buffer Lazy Loading */}
       <main className="w-full max-w-3xl my-6 px-2 flex flex-col items-center gap-1">
-        {chapter.pages.map((page) => (
-          <div
+        {chapter.pages.map((page, index) => (
+          <WebtoonPageItem
             key={page.id}
-            className="w-full relative shadow-2xl overflow-hidden rounded-lg bg-white/5 border border-white/5"
-          >
-            <img
-              src={page.imageUrl}
-              alt={`Page ${page.pageNumber}`}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              className="w-full h-auto object-contain block mx-auto"
-              onError={(e) => {
-                const img = e.target as HTMLImageElement;
-                const retries = parseInt(img.dataset.retries || '0', 10);
-                if (retries < 3) {
-                  img.dataset.retries = String(retries + 1);
-                  setTimeout(() => {
-                    img.src = `${page.imageUrl}&_retry=${Date.now()}`;
-                  }, 1500 * (retries + 1));
-                } else {
-                  img.style.opacity = '0.3';
-                }
-              }}
-            />
-            <span className="absolute bottom-2 right-2 bg-black/70 backdrop-blur-md text-[10px] text-gray-300 font-mono px-2 py-0.5 rounded border border-white/10">
-              {page.pageNumber} / {chapter.pages.length}
-            </span>
-          </div>
+            page={page}
+            index={index}
+            onFirstPagesLoaded={() => setIsChapterReady(true)}
+          />
         ))}
       </main>
 
-      {/* Clean End-of-Chapter Non-Intrusive Ad Placement */}
-      <ChapterAdBanner key={chapter.id} />
+      {/* Clean End-of-Chapter Non-Intrusive Ad Placement with Anti-Redirect Protection */}
+      <ChapterAdBanner key={chapter.id} isChapterReady={isChapterReady} />
 
       {/* Bottom End-of-Chapter Navigation */}
       <footer className="w-full max-w-2xl my-8 px-6">

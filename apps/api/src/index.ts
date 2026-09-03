@@ -35,13 +35,59 @@ app.use(
 
 app.use(express.json({ limit: '1mb' }));
 
-// Strict Rate Limiter for Import Actions only (100 per 15 min per IP)
-// Reading, browsing, and image proxying are NOT rate-limited
+// ─── Rate Limiters ─────────────────────────────────────────────────────────────
+
+// 1. Strict Auth Rate Limiter (15 attempts per 15 min per IP)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 15,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos de autenticación. Por favor espera 15 minutos.' },
+});
+
+// 2. Search Rate Limiter (30 queries per 1 min per IP)
+const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Demasiadas búsquedas seguidas. Por favor espera un momento.' },
+});
+
+// 3. Strict Admin Import Limiter (100 per 15 min per IP)
 const importLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  limit: 100,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
   message: { error: 'Import rate limit exceeded. Please wait 15 minutes.' },
 });
+
+// 4. Image Proxy Limiter (1,200 requests per 15 min per IP - allows fast chapter binge reading)
+const proxyImageLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 1200,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Límite de transferencia de imágenes alcanzado. Por favor espera un momento.' },
+});
+
+// 5. General API Rate Limiter (450 requests per 15 min per IP)
+// Skips image proxy (has its own higher limiter) and health check
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 450,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: (req) => {
+    return req.path.startsWith('/proxy-image') || req.path === '/health';
+  },
+  message: { error: 'Has alcanzado el límite de peticiones. Por favor espera unos minutos.' },
+});
+
+// Mount general limiter on all /api endpoints
+app.use('/api', apiLimiter);
 
 
 // SSRF Safety Check for Image Proxy
@@ -121,7 +167,7 @@ async function ensureAdminUser() {
 }
 
 // POST /api/auth/register - Registrar nuevo usuario estándar
-app.post('/api/auth/register', async (req: Request, res: Response) => {
+app.post('/api/auth/register', authLimiter, async (req: Request, res: Response) => {
   try {
     const { username, email, password } = req.body;
 
@@ -173,7 +219,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
 });
 
 // POST /api/auth/login - Iniciar sesión (Usuario o Admin)
-app.post('/api/auth/login', async (req: Request, res: Response) => {
+app.post('/api/auth/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const { identifier, password } = req.body;
 
@@ -871,7 +917,7 @@ app.get('/api/chapters/:id', async (req: Request, res: Response) => {
 });
 
 // GET /api/mangadex/search - Search MangaDex catalog
-app.get('/api/mangadex/search', async (req: Request, res: Response) => {
+app.get('/api/mangadex/search', searchLimiter, async (req: Request, res: Response) => {
   try {
     const q = (req.query.q as string) || '';
     const results = await import('./lib/mangadex').then((m) => m.searchMangaDex(q));
@@ -900,7 +946,7 @@ app.post('/api/mangadex/import', requireAdmin, importLimiter, async (req: Reques
 });
 
 // GET /api/manganato/search - Search Manganato catalog (Now mapped to WeebCentral under the hood)
-app.get('/api/manganato/search', async (req: Request, res: Response) => {
+app.get('/api/manganato/search', searchLimiter, async (req: Request, res: Response) => {
   try {
     const q = (req.query.q as string) || '';
     // When no query, search popular manhwa terms to populate the default view
@@ -1004,7 +1050,7 @@ function fetchImageWithNode(
 }
 
 // GET /api/proxy-image - Proxy image requests to bypass referer blocks securely
-app.get('/api/proxy-image', async (req: Request, res: Response) => {
+app.get('/api/proxy-image', proxyImageLimiter, async (req: Request, res: Response) => {
   try {
     const { url, referer } = req.query;
     if (!url || typeof url !== 'string') {
