@@ -50,75 +50,59 @@ export const ChapterAdBanner: React.FC<ChapterAdBannerProps> = ({
     };
   }, [isChapterReady]);
 
-  // 2. Inject ad into an isolated sandboxed iframe only after chapter is ready & in view
+  // 2. Inject official Adsterra script into DOM once chapter is ready and user reaches the end
   useEffect(() => {
     if (!isProduction || !isChapterReady || !isInView) return;
 
-    const targetDiv = adContainerRef.current;
-    if (!targetDiv) return;
+    const container = adContainerRef.current;
+    if (!container) return;
 
-    // Small stabilization delay so layout is completely settled
-    const timer = setTimeout(() => {
-      targetDiv.innerHTML = '';
+    // Clear previous contents on chapter transition
+    container.innerHTML = '';
 
-      // Create isolated sandboxed iframe:
-      // Notice: NO 'allow-top-navigation' - this strictly blocks third-party scripts
-      // from redirecting Panelium Scan or hijacking browser history / back button.
-      const iframe = document.createElement('iframe');
-      iframe.setAttribute(
-        'sandbox',
-        'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox'
-      );
-      iframe.setAttribute('title', 'Sponsored Advertisement');
-      iframe.setAttribute('loading', 'lazy');
-      iframe.style.width = '100%';
-      iframe.style.minHeight = '140px';
-      iframe.style.border = 'none';
-      iframe.style.overflow = 'hidden';
-      iframe.style.background = 'transparent';
+    // Create container div required by Adsterra Native Banner
+    const targetDiv = document.createElement('div');
+    targetDiv.id = 'container-5dd8b0c74200491f13a97fb92625227c';
+    targetDiv.className = 'w-full flex items-center justify-center';
+    container.appendChild(targetDiv);
 
-      iframe.srcdoc = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <base target="_blank">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: transparent;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100px;
-      overflow: hidden;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-  </style>
-</head>
-<body>
-  <div id="container-5dd8b0c74200491f13a97fb92625227c"></div>
-  <script type="text/javascript" data-cfasync="false" src="https://pl31140823.profitableratecpmnetwork.com/5dd8b0c74200491f13a97fb92625227c/invoke.js"></script>
-</body>
-</html>`;
+    // Enforce target="_blank" on all Adsterra links so clicks open in a new tab
+    // and never redirect or replace the reader
+    const observer = new MutationObserver(() => {
+      const links = targetDiv.querySelectorAll('a');
+      links.forEach((a) => {
+        if (a.getAttribute('target') !== '_blank') {
+          a.setAttribute('target', '_blank');
+          a.setAttribute('rel', 'noopener noreferrer');
+        }
+      });
+    });
+    observer.observe(targetDiv, { childList: true, subtree: true });
 
-      targetDiv.appendChild(iframe);
-      setAdLoaded(true);
-    }, 600);
+    // Inject official Adsterra invoke.js script
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.async = true;
+    script.setAttribute('data-cfasync', 'false');
+    script.src = 'https://pl31140823.profitableratecpmnetwork.com/5dd8b0c74200491f13a97fb92625227c/invoke.js';
+    container.appendChild(script);
+
+    setAdLoaded(true);
 
     return () => {
-      clearTimeout(timer);
-      if (targetDiv) {
-        targetDiv.innerHTML = '';
+      observer.disconnect();
+      if (container) {
+        container.innerHTML = '';
       }
     };
   }, [isProduction, isChapterReady, isInView]);
 
   return (
-    <div ref={containerRef} className={`w-full max-w-3xl my-6 px-3 ${className}`}>
-      <div className="glass rounded-2xl p-3 sm:p-4 border border-white/10 bg-white/[0.02] flex flex-col items-center justify-center min-h-[140px] text-center relative overflow-hidden transition-all hover:border-white/20 shadow-lg">
+    <div ref={containerRef} className={`w-full max-w-4xl my-8 px-2 sm:px-4 ${className}`}>
+      <div className="glass rounded-2xl p-4 sm:p-6 border border-white/10 bg-white/[0.02] flex flex-col items-center justify-center min-h-[160px] text-center relative transition-all hover:border-white/20 shadow-xl">
         
         {/* Subtle Label */}
-        <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2 block">
+        <span className="text-[10px] sm:text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-3 block">
           Sponsored {!isProduction && '(Modo Desarrollo - Inactivo)'}
         </span>
 
@@ -131,7 +115,7 @@ export const ChapterAdBanner: React.FC<ChapterAdBannerProps> = ({
                 <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                 <span>
                   {!isChapterReady
-                    ? 'Cargando capítulo antes de mostrar publicidad...'
+                    ? 'Cargando contenido...'
                     : 'Cargando patrocinador...'}
                 </span>
               </div>
@@ -139,18 +123,18 @@ export const ChapterAdBanner: React.FC<ChapterAdBannerProps> = ({
 
             <div
               ref={adContainerRef}
-              className={`w-full flex items-center justify-center min-h-[90px] overflow-hidden transition-opacity duration-300 ${
-                adLoaded ? 'opacity-100' : 'opacity-0 h-0 min-h-0'
+              className={`w-full flex items-center justify-center min-h-[100px] transition-opacity duration-300 ${
+                adLoaded ? 'opacity-100' : 'opacity-0'
               }`}
             />
           </div>
         ) : (
-          <div className="w-full flex flex-col items-center justify-center min-h-[90px] border border-dashed border-white/10 rounded-xl bg-white/[0.01] p-3 text-xs text-gray-400">
-            <span className="font-medium text-gray-300">Espacio de Publicidad (Adsterra)</span>
-            <span className="text-[11px] text-gray-500 mt-0.5">
+          <div className="w-full flex flex-col items-center justify-center min-h-[120px] border border-dashed border-white/10 rounded-xl bg-white/[0.01] p-4 text-xs text-gray-400">
+            <span className="font-medium text-gray-300 text-sm mb-1">Espacio de Publicidad Oficial (Adsterra)</span>
+            <span className="text-[11px] text-gray-500 max-w-md">
               {!isChapterReady
-                ? '⏳ Esperando a que el capítulo y las imágenes terminen de cargar.'
-                : '✅ Capítulo listo. El anuncio se activará de forma aislada en producción sin redirigir al lector.'}
+                ? '⏳ Esperando a que el capítulo y las páginas terminen de cargar.'
+                : '✅ Capítulo listo. El script se ejecuta directamente en paneliumscan.com con target="_blank" para registrar 100% de impresiones y clics sin redirecciones.'}
             </span>
           </div>
         )}
