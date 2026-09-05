@@ -5,6 +5,8 @@ import rateLimit from 'express-rate-limit';
 import { prisma } from './lib/prisma';
 import { checkRedisHealth, redis } from './lib/redis';
 import { startBackgroundSync } from './lib/sync';
+import { getUserNotifications } from './lib/notifications';
+import { generateSeriesOgImage, generateChapterOgImage } from './lib/ogGenerator';
 import {
   hashPassword,
   verifyPassword,
@@ -418,6 +420,92 @@ app.post('/api/user/history', requireAuth, async (req: AuthenticatedRequest, res
     console.error('Save history error:', error);
     return res.status(500).json({ error: 'Error al guardar historial.' });
   }
+});
+
+// GET /api/user/notifications - Obtener notificaciones de nuevos capítulos en favoritos
+app.get('/api/user/notifications', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const data = await getUserNotifications(req.user!.id);
+    return res.json(data);
+  } catch (error) {
+    console.error('Get notifications error:', error);
+    return res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+// POST /api/user/notifications/mark-read - Marcar notificaciones como leídas
+app.post('/api/user/notifications/mark-read', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { chapterIds } = req.body;
+    const userId = req.user!.id;
+
+    if (Array.isArray(chapterIds) && chapterIds.length > 0) {
+      await Promise.all(
+        chapterIds.map((chapterId) =>
+          prisma.history.upsert({
+            where: { userId_chapterId: { userId, chapterId } },
+            update: { updatedAt: new Date() },
+            create: { userId, chapterId, page: 1 },
+          })
+        )
+      );
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Mark read notifications error:', error);
+    return res.status(500).json({ error: 'Failed to mark notifications as read' });
+  }
+});
+
+// GET /sitemap.xml - Dynamic XML sitemap for Google/Bing search indexing
+app.get('/sitemap.xml', async (req: Request, res: Response) => {
+  try {
+    const baseUrl = process.env.SITE_URL || 'https://paneliumscan.com';
+    const seriesList = await prisma.series.findMany({
+      select: {
+        slug: true,
+        createdAt: true,
+        chapters: {
+          select: { number: true, createdAt: true },
+          orderBy: { number: 'desc' },
+          take: 100,
+        },
+      },
+    });
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+    // Static root pages
+    xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+    xml += `  <url>\n    <loc>${baseUrl}/library</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+
+    for (const s of seriesList) {
+      const seriesLastMod = s.chapters[0]?.createdAt || s.createdAt;
+      xml += `  <url>\n    <loc>${baseUrl}/series/${s.slug}</loc>\n    <lastmod>${new Date(seriesLastMod).toISOString().split('T')[0]}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
+
+      for (const ch of s.chapters) {
+        xml += `  <url>\n    <loc>${baseUrl}/${s.slug}/chapter/${ch.number}</loc>\n    <lastmod>${new Date(ch.createdAt).toISOString().split('T')[0]}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+      }
+    }
+
+    xml += `</urlset>`;
+
+    res.header('Content-Type', 'application/xml');
+    res.header('Cache-Control', 'public, max-age=3600');
+    return res.send(xml);
+  } catch (error) {
+    console.error('Sitemap error:', error);
+    return res.status(500).send('Error generating sitemap');
+  }
+});
+
+// GET /robots.txt - Standard robots.txt with sitemap reference
+app.get('/robots.txt', (req: Request, res: Response) => {
+  const baseUrl = process.env.SITE_URL || 'https://paneliumscan.com';
+  const robots = `User-agent: *\nAllow: /\nDisallow: /importer\nDisallow: /api/\n\nSitemap: ${baseUrl}/sitemap.xml\n`;
+  res.header('Content-Type', 'text/plain');
+  return res.send(robots);
 });
 
 // DELETE /api/user/history/:seriesSlug - Eliminar serie del historial en la nube
@@ -931,8 +1019,14 @@ app.get('/api/chapters/:id', async (req: Request, res: Response) => {
 app.get('/api/mangadex/search', searchLimiter, async (req: Request, res: Response) => {
   try {
     const q = (req.query.q as string) || '';
-    const results = await import('./lib/mangadex').then((m) => m.searchMangaDex(q));
-    return res.json({ data: results });
+    const genre = (req.query.genre as string) || '';
+    const page = parseInt((req.query.page as string) || '1', 10) || 1;
+    const result = await import('./lib/mangadex').then((m) => m.searchMangaDex(q, genre, page));
+    return res.json({
+      data: result.results,
+      hasNextPage: result.hasNextPage,
+      currentPage: result.currentPage,
+    });
   } catch (error) {
     console.error('MangaDex search endpoint error:', error);
     return res.status(500).json({ error: 'Failed to search MangaDex' });
@@ -960,10 +1054,14 @@ app.post('/api/mangadex/import', requireAdmin, importLimiter, async (req: Reques
 app.get('/api/manganato/search', searchLimiter, async (req: Request, res: Response) => {
   try {
     const q = (req.query.q as string) || '';
-    // When no query, search popular manhwa terms to populate the default view
-    const searchTerm = q.trim() || 'solo leveling';
-    const results = await import('./lib/weebcentral').then((m) => m.searchWeebCentral(searchTerm));
-    return res.json({ data: results });
+    const genre = (req.query.genre as string) || '';
+    const page = parseInt((req.query.page as string) || '1', 10) || 1;
+    const result = await import('./lib/weebcentral').then((m) => m.searchWeebCentral(q, genre, page));
+    return res.json({
+      data: result.results,
+      hasNextPage: result.hasNextPage,
+      currentPage: result.currentPage,
+    });
   } catch (error) {
     console.error('WeebCentral search endpoint error:', error);
     return res.status(500).json({ error: 'Failed to search WeebCentral' });
@@ -1159,83 +1257,206 @@ app.get('/api/proxy-image', proxyImageLimiter, async (req: Request, res: Respons
 
 
 // ─── Dynamic Open Graph Prerender Endpoints ──────────────────────────────────
-// These routes serve minimal HTML with correct OG tags for social media bots.
-// nginx routes bot user-agents (WhatsApp, Telegram, etc.) here instead of the SPA.
+// ─── Dynamic Open Graph & Search Engine Prerender Endpoints ───────────────────
+// These routes serve rich semantic HTML with OG tags and Schema.org JSON-LD.
+// nginx proxies search engine bots (Googlebot, Bingbot) and social bots (Discord, WhatsApp) here.
 
 const SITE_URL = 'https://paneliumscan.com';
 const SITE_NAME = 'Panelium Scan';
-const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.jpg`;
+const DEFAULT_OG_IMAGE = `${SITE_URL}/favicon.png`;
 
 function buildOgHtml(opts: {
   title: string;
+  metaTitle: string;
   description: string;
   image: string;
   url: string;
   type?: string;
+  author?: string;
+  artist?: string;
+  genres?: string[];
+  chaptersCount?: number;
+  schemaJson?: object;
 }): string {
-  const { title, description, image, url, type = 'website' } = opts;
+  const {
+    title,
+    metaTitle,
+    description,
+    image,
+    url,
+    type = 'website',
+    author = 'Unknown',
+    artist = 'Unknown',
+    genres = [],
+    chaptersCount = 0,
+    schemaJson,
+  } = opts;
+
   const escapedTitle = title.replace(/"/g, '&quot;');
-  const escapedDesc = description.replace(/"/g, '&quot;').slice(0, 300);
+  const escapedMetaTitle = metaTitle.replace(/"/g, '&quot;');
+  const escapedDesc = description.replace(/"/g, '&quot;').slice(0, 320);
+
+  const schemaScript = schemaJson
+    ? `<script type="application/ld+json">\n${JSON.stringify(schemaJson, null, 2)}\n  </script>`
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>${escapedTitle} | ${SITE_NAME}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapedMetaTitle}</title>
   <meta name="description" content="${escapedDesc}" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <link rel="canonical" href="${url}" />
+
+  <!-- Open Graph / Facebook / Discord / WhatsApp -->
   <meta property="og:type" content="${type}" />
   <meta property="og:url" content="${url}" />
   <meta property="og:site_name" content="${SITE_NAME}" />
-  <meta property="og:title" content="${escapedTitle} | ${SITE_NAME}" />
+  <meta property="og:title" content="${escapedMetaTitle}" />
   <meta property="og:description" content="${escapedDesc}" />
   <meta property="og:image" content="${image}" />
+  <meta property="og:image:alt" content="${escapedTitle}" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
+  <meta name="theme-color" content="#F43F5E" />
+
+  <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${escapedTitle} | ${SITE_NAME}" />
+  <meta name="twitter:title" content="${escapedMetaTitle}" />
   <meta name="twitter:description" content="${escapedDesc}" />
   <meta name="twitter:image" content="${image}" />
-  <meta http-equiv="refresh" content="0;url=${url}" />
+
+  <!-- Schema.org Structured Data -->
+  ${schemaScript}
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background-color: #0d0d12;
+      color: #f3f4f6;
+      margin: 0;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .card {
+      max-width: 680px;
+      background: #15161e;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 24px;
+      margin-top: 40px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    h1 { color: #ffffff; font-size: 24px; margin-top: 0; margin-bottom: 8px; }
+    p { color: #9ca3af; font-size: 14px; line-height: 1.6; }
+    .cover { width: 140px; height: 196px; border-radius: 8px; object-fit: cover; float: left; margin-right: 20px; margin-bottom: 12px; }
+    .btn {
+      display: inline-block;
+      background: #f43f5e;
+      color: #ffffff;
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 14px;
+      margin-top: 16px;
+    }
+    .genres { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+    .genre-tag { background: rgba(244,63,94,0.15); color: #fda4af; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
+  </style>
 </head>
 <body>
-  <p>Redirecting to <a href="${url}">${escapedTitle}</a>...</p>
+  <div class="card">
+    <img src="${image}" alt="${escapedTitle}" class="cover" />
+    <h1>${escapedTitle}</h1>
+    <div class="genres">
+      ${genres.map((g) => `<span class="genre-tag">${g}</span>`).join('')}
+    </div>
+    <p><strong>Author:</strong> ${author} | <strong>Artist:</strong> ${artist}</p>
+    <p>${escapedDesc}</p>
+    <a href="${url}" class="btn">Read on ${SITE_NAME} →</a>
+  </div>
 </body>
 </html>`;
 }
 
-// GET /prerender/series/:slug — OG page for series detail
+// GET /prerender/series/:slug — SEO & OG page for series detail
 app.get('/prerender/series/:slug', async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
     const series = await prisma.series.findUnique({
       where: { slug },
-      select: { title: true, description: true, cover: true, slug: true },
+      include: {
+        genres: { include: { genre: true } },
+        chapters: {
+          select: { id: true, number: true },
+          orderBy: { number: 'asc' },
+        },
+      },
     });
 
     if (!series) {
-      return res.status(404).send(buildOgHtml({
-        title: 'Series Not Found',
-        description: 'The requested series could not be found.',
-        image: DEFAULT_OG_IMAGE,
-        url: SITE_URL,
-      }));
+      return res.status(404).send(
+        buildOgHtml({
+          title: 'Series Not Found',
+          metaTitle: `Series Not Found | ${SITE_NAME}`,
+          description: 'The requested manhwa series could not be found.',
+          image: DEFAULT_OG_IMAGE,
+          url: SITE_URL,
+        })
+      );
     }
 
     const url = `${SITE_URL}/series/${series.slug}`;
-    const image = series.cover || DEFAULT_OG_IMAGE;
-    return res.send(buildOgHtml({
-      title: series.title,
-      description: series.description,
-      image,
+    const image = `${SITE_URL}/api/og/series/${series.slug}.png`;
+    const genreNames = series.genres.map((g) => g.genre.name);
+    const metaTitle = `Read ${series.title} Online Free (All Chapters) | ${SITE_NAME}`;
+    const cleanDesc = series.description || `Read ${series.title} manhwa online in high definition for free.`;
+
+    const schemaJson = {
+      '@context': 'https://schema.org',
+      '@type': 'Book',
+      name: series.title,
       url,
-      type: 'book',
-    }));
+      image,
+      description: cleanDesc,
+      author: { '@type': 'Person', name: series.author || 'Unknown' },
+      genre: genreNames,
+      numberOfPages: series.chapters.length,
+      publisher: {
+        '@type': 'Organization',
+        name: SITE_NAME,
+        url: SITE_URL,
+      },
+    };
+
+    return res.send(
+      buildOgHtml({
+        title: series.title,
+        metaTitle,
+        description: cleanDesc,
+        image,
+        url,
+        type: 'book',
+        author: series.author,
+        artist: series.artist,
+        genres: genreNames,
+        chaptersCount: series.chapters.length,
+        schemaJson,
+      })
+    );
   } catch (error) {
     console.error('OG prerender series error:', error);
     return res.status(500).send('Error generating preview');
   }
 });
 
-// GET /prerender/:slug/chapter/:number — OG page for a chapter
+// GET /prerender/:slug/chapter/:number — SEO & OG page for a chapter
 app.get('/prerender/:slug/chapter/:number', async (req: Request, res: Response) => {
   try {
     const { slug, number } = req.params;
@@ -1243,39 +1464,104 @@ app.get('/prerender/:slug/chapter/:number', async (req: Request, res: Response) 
 
     const series = await prisma.series.findFirst({
       where: { OR: [{ slug }, { id: slug }] },
-      select: { id: true, title: true, cover: true, slug: true },
+      select: { id: true, title: true, cover: true, slug: true, author: true },
     });
 
     if (!series || isNaN(num)) {
-      return res.status(404).send(buildOgHtml({
-        title: 'Chapter Not Found',
-        description: 'The requested chapter could not be found.',
-        image: DEFAULT_OG_IMAGE,
-        url: SITE_URL,
-      }));
+      return res.status(404).send(
+        buildOgHtml({
+          title: 'Chapter Not Found',
+          metaTitle: `Chapter Not Found | ${SITE_NAME}`,
+          description: 'The requested chapter could not be found.',
+          image: DEFAULT_OG_IMAGE,
+          url: SITE_URL,
+        })
+      );
     }
 
     const chapter = await prisma.chapter.findFirst({
       where: { seriesId: series.id, number: num },
-      select: { number: true, title: true },
+      select: { number: true, title: true, createdAt: true },
     });
 
     const chapterLabel = chapter?.title
-      ? `Chapter ${num}: ${chapter.title}`
+      ? `Chapter ${num} - ${chapter.title}`
       : `Chapter ${num}`;
 
     const url = `${SITE_URL}/${series.slug}/chapter/${num}`;
-    const image = series.cover || DEFAULT_OG_IMAGE;
-    return res.send(buildOgHtml({
-      title: `${series.title} — ${chapterLabel}`,
-      description: `Read ${series.title} Chapter ${num} online for free on Panelium Scan. High quality manhwa and manga reader.`,
-      image,
-      url,
-      type: 'article',
-    }));
+    const image = `${SITE_URL}/api/og/chapter/${series.slug}/${num}.png`;
+    const metaTitle = `Read ${series.title} ${chapterLabel} Online Free | ${SITE_NAME}`;
+    const description = `Read ${series.title} ${chapterLabel} online in HD quality for free on ${SITE_NAME}. Fast loading manhwa reader.`;
+
+    const schemaJson = {
+      '@context': 'https://schema.org',
+      '@type': 'Article',
+      headline: `${series.title} - ${chapterLabel}`,
+      image: [image],
+      datePublished: chapter?.createdAt ? chapter.createdAt.toISOString() : new Date().toISOString(),
+      author: {
+        '@type': 'Person',
+        name: series.author || 'Unknown',
+      },
+      publisher: {
+        '@type': 'Organization',
+        name: SITE_NAME,
+        url: SITE_URL,
+      },
+      description,
+      mainEntityOfPage: {
+        '@type': 'WebPage',
+        '@id': url,
+      },
+    };
+
+    return res.send(
+      buildOgHtml({
+        title: `${series.title} (${chapterLabel})`,
+        metaTitle,
+        description,
+        image,
+        url,
+        type: 'article',
+        author: series.author,
+        schemaJson,
+      })
+    );
   } catch (error) {
     console.error('OG prerender chapter error:', error);
     return res.status(500).send('Error generating preview');
+  }
+});
+
+// ─── Dynamic Open Graph PNG Image Endpoints ─────────────────────────────────
+// Generates the vibrant Yellow Neo-brutalist pop card for Discord, Twitter, WhatsApp
+app.get(['/api/og/series/:slug.png', '/api/og/series/:slug'], async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const cleanSlug = slug.replace(/\.png$/, '');
+    const pngBuffer = await generateSeriesOgImage(cleanSlug);
+
+    res.header('Content-Type', 'image/png');
+    res.header('Cache-Control', 'public, max-age=86400, s-maxage=86400'); // Cache 24h
+    return res.send(pngBuffer);
+  } catch (error) {
+    console.error('Error generating series OG PNG:', error);
+    return res.status(500).send('Error generating card image');
+  }
+});
+
+app.get(['/api/og/chapter/:slug/:number.png', '/api/og/chapter/:slug/:number'], async (req: Request, res: Response) => {
+  try {
+    const { slug, number } = req.params;
+    const cleanNum = parseFloat(number.replace(/\.png$/, ''));
+    const pngBuffer = await generateChapterOgImage(slug, cleanNum);
+
+    res.header('Content-Type', 'image/png');
+    res.header('Cache-Control', 'public, max-age=86400, s-maxage=86400'); // Cache 24h
+    return res.send(pngBuffer);
+  } catch (error) {
+    console.error('Error generating chapter OG PNG:', error);
+    return res.status(500).send('Error generating card image');
   }
 });
 

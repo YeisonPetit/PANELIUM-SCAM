@@ -8,6 +8,7 @@ import { WebtoonReader } from './components/WebtoonReader';
 import { MangaDexImporter } from './components/MangaDexImporter';
 import { FavoritesView } from './components/FavoritesView';
 import { AuthModal } from './components/AuthModal';
+import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { NotFound } from './components/NotFound';
 
 const API_BASE = '';
@@ -100,9 +101,22 @@ function AppContent() {
   const { token, isAdmin } = useAuth();
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [health, setHealth] = useState<any>(null);
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Global keyboard shortcut: Ctrl+K / Cmd+K to trigger search modal from anywhere
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   const [readChapters, setReadChapters] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('read-chapters');
@@ -268,9 +282,22 @@ function AppContent() {
           onGoFavorites={handleGoFavorites}
           onOpenImporter={handleOpenImporter}
           onOpenAuth={() => setIsAuthModalOpen(true)}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onSelectChapter={(seriesSlug, chapNumber, chapId) => {
+            handleSelectChapter(chapId);
+            navigate(`/${seriesSlug}/chapter/${chapNumber}`);
+          }}
           activeView={currentView}
         />
       )}
+
+      {/* Global Search Modal / Command Palette */}
+      <GlobalSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        seriesList={seriesList}
+        onSelectSeries={(slug) => navigate(`/series/${slug}`)}
+      />
 
       {/* Login & Register Modal */}
       <AuthModal
@@ -293,6 +320,7 @@ function AppContent() {
               }}
               viewMode="home"
               onGoLibrary={handleGoLibrary}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
             />
           }
         />
@@ -310,6 +338,7 @@ function AppContent() {
                 navigate(`/${seriesSlug}/chapter/${chapNumber}`);
               }}
               viewMode="library"
+              onOpenAuth={() => setIsAuthModalOpen(true)}
             />
           }
         />
@@ -326,6 +355,7 @@ function AppContent() {
                 navigate(`/${seriesSlug}/chapter/${chapNumber}`);
               }}
               onGoExplore={handleGoLibrary}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
             />
           }
         />

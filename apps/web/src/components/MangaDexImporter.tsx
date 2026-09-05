@@ -26,11 +26,38 @@ interface ExistingSeriesItem {
   sourceUrl: string | null;
 }
 
+const POPULAR_GENRES = [
+  'ALL',
+  'Action',
+  'Fantasy',
+  'Martial Arts',
+  'Adventure',
+  'Isekai',
+  'Reincarnation',
+  'Comedy',
+  'Drama',
+  'Romance',
+  'Sci-Fi',
+  'Supernatural',
+  'Mystery',
+  'Psychological',
+  'Thriller',
+  'Horror',
+  'Slice of Life',
+  'Historical',
+  'Magic',
+  'Monsters',
+];
+
 export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImported }) => {
   const [activeSource, setActiveSource] = useState<'weebcentral' | 'mangadex'>('weebcentral');
   const [query, setQuery] = useState<string>('');
+  const [selectedGenre, setSelectedGenre] = useState<string>('ALL');
   const [results, setResults] = useState<ImporterItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [page, setPage] = useState<number>(1);
+  const [hasNextPage, setHasNextPage] = useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [importedSlugs, setImportedSlugs] = useState<Record<string, string>>({});
   
@@ -52,43 +79,67 @@ export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImpo
   }, [loadExistingSeries]);
 
   // Perform search
-  const performSearch = useCallback((searchTerm: string) => {
-    setLoading(true);
+  const performSearch = useCallback((searchTerm: string, genreFilter = selectedGenre, pageNum = 1, append = false) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setPage(1);
+    }
+
+    const genreParam = genreFilter && genreFilter !== 'ALL' ? `&genre=${encodeURIComponent(genreFilter)}` : '';
+    const pageParam = `&page=${pageNum}`;
     const endpoint =
       activeSource === 'weebcentral'
-        ? `${API_BASE}/api/manganato/search?q=${encodeURIComponent(searchTerm)}`
-        : `${API_BASE}/api/mangadex/search?q=${encodeURIComponent(searchTerm)}`;
+        ? `${API_BASE}/api/manganato/search?q=${encodeURIComponent(searchTerm)}${genreParam}${pageParam}`
+        : `${API_BASE}/api/mangadex/search?q=${encodeURIComponent(searchTerm)}${genreParam}${pageParam}`;
 
     fetch(endpoint)
       .then((res) => res.json())
       .then((json) => {
-        setResults(json.data || []);
+        const newItems = json.data || [];
+        setResults((prev) => (append ? [...prev, ...newItems] : newItems));
+        setHasNextPage(Boolean(json.hasNextPage));
+        setPage(pageNum);
         setLoading(false);
+        setLoadingMore(false);
       })
       .catch((err) => {
         console.error('Failed to search source:', err);
-        setResults([]);
+        if (!append) setResults([]);
+        setHasNextPage(false);
         setLoading(false);
+        setLoadingMore(false);
       });
-  }, [activeSource]);
+  }, [activeSource, selectedGenre]);
 
   // Trigger search immediately when source tab switches (reset query too)
   useEffect(() => {
     setQuery('');
-    performSearch('');
+    performSearch('', selectedGenre, 1, false);
   }, [activeSource]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced search-as-you-type (400ms delay)
   useEffect(() => {
     const timer = setTimeout(() => {
-      performSearch(query);
+      performSearch(query, selectedGenre, 1, false);
     }, 400);
     return () => clearTimeout(timer);
-  }, [query, performSearch]);
+  }, [query, selectedGenre, performSearch]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    performSearch(query);
+    performSearch(query, selectedGenre, 1, false);
+  };
+
+  const handleGenreSelect = (genre: string) => {
+    setSelectedGenre(genre);
+    performSearch(query, genre, 1, false);
+  };
+
+  const handleLoadMore = () => {
+    if (loadingMore || !hasNextPage) return;
+    performSearch(query, selectedGenre, page + 1, true);
   };
 
   const { token } = useAuth();
@@ -170,7 +221,7 @@ export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImpo
       {/* Header Banner */}
       <div className="glass p-8 rounded-3xl mb-10 border border-white/10 relative overflow-hidden shadow-glow">
         <div className="absolute inset-0 bg-gradient-to-r from-red-600/20 via-accent/20 to-transparent pointer-events-none" />
-        <div className="relative z-10 max-w-3xl">
+        <div className="relative z-10 max-w-4xl">
           <span className="inline-block bg-accent/20 text-accent border border-accent/30 text-xs font-bold px-3 py-1 rounded-full mb-4">
             🌐 Live Importer {activeSource === 'weebcentral' ? '(WeebCentral)' : '(MangaDex)'}
           </span>
@@ -235,13 +286,54 @@ export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImpo
               </button>
             </div>
           </form>
+
+          {/* Genre Filter Pills */}
+          <div className="mt-5 pt-4 border-t border-white/10">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                🏷️ Filter by Genre:
+              </span>
+              {selectedGenre !== 'ALL' && (
+                <button
+                  type="button"
+                  onClick={() => handleGenreSelect('ALL')}
+                  className="text-xs text-accent hover:underline font-semibold"
+                >
+                  Clear Genre Filter ✕
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
+              {POPULAR_GENRES.map((g) => {
+                const isSelected = selectedGenre === g;
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => handleGenreSelect(g)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                      isSelected
+                        ? 'bg-accent text-white border-accent shadow-glow scale-105'
+                        : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    {g === 'ALL' ? '🌐 All Genres' : g}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Results Header */}
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-2xl font-bold text-white flex items-center gap-2">
-          {query.trim() ? `Search Results for "${query}"` : `Popular on ${activeSource === 'weebcentral' ? 'WeebCentral' : 'MangaDex'}`}
+          {query.trim()
+            ? `Search Results for "${query}"`
+            : selectedGenre !== 'ALL'
+            ? `${selectedGenre} titles on ${activeSource === 'weebcentral' ? 'WeebCentral' : 'MangaDex'}`
+            : `Popular on ${activeSource === 'weebcentral' ? 'WeebCentral' : 'MangaDex'}`}
           <span className="text-xs bg-white/10 px-2.5 py-1 rounded-full text-accent">{results.length}</span>
         </h3>
       </div>
@@ -386,6 +478,29 @@ export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImpo
               </motion.div>
             );
           })}
+        </div>
+      )}
+
+      {/* Load More Button */}
+      {!loading && hasNextPage && results.length > 0 && (
+        <div className="mt-12 text-center">
+          <button
+            type="button"
+            disabled={loadingMore}
+            onClick={handleLoadMore}
+            className="bg-white/10 hover:bg-accent text-white border border-white/15 hover:border-accent font-bold px-8 py-4 rounded-2xl shadow-lg hover:shadow-glow transition-all flex items-center gap-3 mx-auto disabled:opacity-50"
+          >
+            {loadingMore ? (
+              <>
+                <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Loading more titles (Page {page + 1})...</span>
+              </>
+            ) : (
+              <>
+                <span>⬇️ Load More Titles (Page {page + 1})</span>
+              </>
+            )}
+          </button>
         </div>
       )}
     </div>

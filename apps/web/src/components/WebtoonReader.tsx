@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faExpand, faCompress, faKeyboard } from '@fortawesome/free-solid-svg-icons';
 import { saveProgress } from './ContinueReadingWidget';
 import { injectChapterSchema } from '../utils/schema';
 import { ChapterAdBanner } from './ChapterAdBanner';
@@ -142,6 +144,10 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
   const [loadingPages, setLoadingPages] = useState<boolean>(false);
   const [isChapterReady, setIsChapterReady] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isNavVisible, setIsNavVisible] = useState<boolean>(true);
+  const [showShortcutToast, setShowShortcutToast] = useState<boolean>(true);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const lastScrollYRef = useRef<number>(0);
   const prefetchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const onChapterLoadedRef = useRef(onChapterLoaded);
   onChapterLoadedRef.current = onChapterLoaded;
@@ -325,18 +331,71 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
     };
   }, [endpointUrl, fetchChapter]);
 
-  // Ensure ads and end components only load once the chapter has settled
+  // Smart Scroll Auto-Hide: Hides navbar when scrolling down for immersion, reveals on scroll up or at chapter bottom
   useEffect(() => {
-    setIsChapterReady(false);
-    if (!chapter || chapter.pages.length === 0) return;
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const diff = currentScrollY - lastScrollYRef.current;
+      const windowHeight = window.innerHeight;
+      const fullHeight = document.documentElement.scrollHeight;
+      const isNearBottom = currentScrollY + windowHeight >= fullHeight - 500;
 
-    // Safety fallback: activate ads after 3.5s if images take longer to emit onload
-    const timer = setTimeout(() => {
-      setIsChapterReady(true);
-    }, 3500);
+      if (currentScrollY < 100 || isNearBottom) {
+        setIsNavVisible(true);
+      } else if (diff > 12) {
+        // Scrolling down -> hide navbar
+        setIsNavVisible(false);
+      } else if (diff < -15) {
+        // Scrolling up -> show navbar
+        setIsNavVisible(true);
+      }
+      lastScrollYRef.current = currentScrollY;
+    };
 
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Keyboard Shortcuts: Left/Right Arrows for Chapters, F for Fullscreen, M for Menu
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
+
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') {
+        if (chapter?.prevChapterNumber != null && chapter.series?.slug) {
+          onNavigateChapter(chapter.prevChapterNumber, chapter.series.slug);
+        } else if (chapter?.prevChapterId) {
+          onNavigateChapter(chapter.prevChapterId);
+        }
+      } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') {
+        if (chapter?.nextChapterNumber != null && chapter.series?.slug) {
+          onNavigateChapter(chapter.nextChapterNumber, chapter.series.slug);
+        } else if (chapter?.nextChapterId) {
+          onNavigateChapter(chapter.nextChapterId);
+        }
+      } else if (e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen?.().catch(() => {});
+          setIsFullscreen(true);
+        } else {
+          document.exitFullscreen?.().catch(() => {});
+          setIsFullscreen(false);
+        }
+      } else if (e.key.toLowerCase() === 'm' || e.key === 'Escape') {
+        setIsNavVisible((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [chapter, onNavigateChapter]);
+
+  // Hide keyboard shortcut guide pill after 4 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => setShowShortcutToast(false), 4000);
     return () => clearTimeout(timer);
-  }, [chapter?.id]);
+  }, []);
 
   if (loading) {
     return (
@@ -415,14 +474,18 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
 
   return (
     <div className="min-h-screen bg-[#050507] text-white flex flex-col items-center">
-      {/* Floating Reader Navigation Bar */}
-      <header className="sticky top-0 z-50 w-full glass border-b border-white/10 backdrop-blur-xl bg-background/90 px-6 py-3 shadow-2xl">
+      {/* Floating Reader Navigation Bar with Auto-Hide on Scroll Down */}
+      <header
+        className={`sticky top-0 z-50 w-full glass border-b border-white/10 backdrop-blur-xl bg-background/90 px-4 sm:px-6 py-2.5 sm:py-3 shadow-2xl transition-all duration-300 ease-in-out ${
+          isNavVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
+        }`}
+      >
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
             onClick={() => onBackToSeries(chapter.series.slug)}
-            className="text-xs text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 px-3.5 py-2 rounded-xl border border-white/10 flex items-center gap-2 transition-colors"
+            className="text-xs text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl border border-white/10 flex items-center gap-2 transition-colors shrink-0"
           >
-            ← {chapter.series.title}
+            ← <span className="hidden sm:inline">{chapter.series.title}</span><span className="sm:hidden">Series</span>
           </button>
 
           <div className="text-center min-w-0 flex-1 px-2">
@@ -430,11 +493,28 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
               {chapter.title || `Ch. ${chapter.number}`}
             </h2>
             <span className="text-[10px] text-accent font-medium hidden sm:block">
-              Webtoon Scroll
+              Webtoon Scroll • Press F for Fullscreen
             </span>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={() => {
+                if (!document.fullscreenElement) {
+                  document.documentElement.requestFullscreen?.().catch(() => {});
+                  setIsFullscreen(true);
+                } else {
+                  document.exitFullscreen?.().catch(() => {});
+                  setIsFullscreen(false);
+                }
+              }}
+              className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 flex items-center justify-center text-xs transition-all mr-1"
+              title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
+              aria-label="Toggle Fullscreen"
+            >
+              <FontAwesomeIcon icon={isFullscreen ? faCompress : faExpand} />
+            </button>
+
             <button
               disabled={!chapter.prevChapterId && chapter.prevChapterNumber == null}
               onClick={() => {
@@ -473,6 +553,36 @@ export const WebtoonReader: React.FC<WebtoonReaderProps> = ({
           </div>
         </div>
       </header>
+
+      {/* Floating Keyboard Shortcut Helper Toast */}
+      <AnimatePresence>
+        {showShortcutToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.25 }}
+            className="fixed bottom-6 z-50 bg-[#0F1015]/90 border border-white/15 px-4 py-2 rounded-2xl shadow-2xl backdrop-blur-xl text-xs text-gray-300 flex items-center gap-3 pointer-events-none"
+          >
+            <FontAwesomeIcon icon={faKeyboard} className="text-rose-400" />
+            <span className="flex items-center gap-1 font-mono text-[11px] text-white">
+              <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/10">←</kbd>
+              <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/10">→</kbd>
+              Chapters
+            </span>
+            <span>•</span>
+            <span className="flex items-center gap-1 font-mono text-[11px] text-white">
+              <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/10">F</kbd>
+              Fullscreen
+            </span>
+            <span>•</span>
+            <span className="flex items-center gap-1 font-mono text-[11px] text-white">
+              <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/10">M</kbd>
+              Menu
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Webtoon Vertical Page Stream with Smart 2-Page Buffer Lazy Loading */}
       <main className="w-full max-w-3xl my-6 px-2 flex flex-col items-center gap-1">

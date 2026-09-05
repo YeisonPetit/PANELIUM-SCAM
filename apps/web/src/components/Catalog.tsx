@@ -13,6 +13,7 @@ import {
   faChevronLeft,
   faChevronRight,
   faXmark,
+  faLock,
 } from '@fortawesome/free-solid-svg-icons';
 import { ContinueReadingWidget } from './ContinueReadingWidget';
 
@@ -60,6 +61,7 @@ interface CatalogProps {
   onSelectChapter?: (slug: string, chapterNumber: number, chapterId: string) => void;
   viewMode?: 'home' | 'library';
   onGoLibrary?: () => void;
+  onOpenAuth?: () => void;
 }
 
 function timeAgo(dateStr?: string): string {
@@ -91,6 +93,7 @@ export const Catalog: React.FC<CatalogProps> = ({
   onSelectChapter,
   viewMode = 'home',
   onGoLibrary,
+  onOpenAuth,
 }) => {
   const { token, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
@@ -129,6 +132,10 @@ export const Catalog: React.FC<CatalogProps> = ({
   // Toggle favorite on card
   const toggleFavoriteCard = async (e: React.MouseEvent, item: Series) => {
     e.stopPropagation();
+    if (!user) {
+      onOpenAuth?.();
+      return;
+    }
     const isFav = favorites.includes(item.id) || favorites.includes(item.slug);
     const newFavs = isFav
       ? favorites.filter((id) => id !== item.id && id !== item.slug)
@@ -214,13 +221,13 @@ export const Catalog: React.FC<CatalogProps> = ({
     return list;
   }, [seriesList, selectedStatus, selectedGenre, onlyFavorites, searchQuery, sortBy, favorites]);
 
-  // On Home: show ONLY the 20 most recently updated manhwas. On Library: show all.
+  // On Home: show ONLY the 20 most recently updated manhwas, UNLESS search or filter is active
   const displayedSeries = useMemo(() => {
-    if (viewMode === 'home') {
+    if (viewMode === 'home' && !searchQuery.trim() && selectedGenre === 'ALL' && !onlyFavorites) {
       return filteredSeries.slice(0, 20);
     }
     return filteredSeries;
-  }, [filteredSeries, viewMode]);
+  }, [filteredSeries, viewMode, searchQuery, selectedGenre, onlyFavorites]);
 
 
   if (loading) {
@@ -404,15 +411,30 @@ export const Catalog: React.FC<CatalogProps> = ({
           </div>
 
           <button
-            onClick={() => setOnlyFavorites(!onlyFavorites)}
+            onClick={() => {
+              if (!user) {
+                onOpenAuth?.();
+                return;
+              }
+              setOnlyFavorites(!onlyFavorites);
+            }}
             className={`px-4 py-2 rounded-2xl text-xs font-bold border transition-all flex items-center gap-2 ${
               onlyFavorites
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
                 : 'bg-white/5 hover:bg-white/10 text-gray-300 border-white/10'
             }`}
           >
-            <FontAwesomeIcon icon={faStar} className={onlyFavorites ? 'text-amber-400' : 'text-gray-400'} />
-            <span>{onlyFavorites ? 'Favorites Only (' + favorites.length + ')' : 'View Favorites'}</span>
+            <FontAwesomeIcon
+              icon={onlyFavorites ? faStar : (user ? faStar : faLock)}
+              className={onlyFavorites ? 'text-amber-400' : 'text-gray-400'}
+            />
+            <span>
+              {onlyFavorites
+                ? 'Favorites Only (' + favorites.length + ')'
+                : user
+                ? 'View Favorites'
+                : 'Favorites (Sign In)'}
+            </span>
           </button>
         </div>
 

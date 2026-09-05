@@ -19,14 +19,41 @@ export interface MangaDexSearchResult {
   lastChapter?: string;
 }
 
+const MANGADEX_GENRE_TAG_MAP: Record<string, string> = {
+  action: '391b0423-d847-456f-aff0-8b0cfc03066b',
+  adventure: '87cc87cd-a395-47af-b27a-93258283bbc6',
+  comedy: '4d32cc48-9f00-4cca-9b5a-a839f0764984',
+  drama: 'b9af3a63-f03e-4ba3-b89c-6e67c3f863e4',
+  fantasy: 'cdc58593-87dd-415e-bbc0-2ec27bf404cc',
+  horror: 'cdad7e68-07dd-4270-a080-1452a81757fb',
+  isekai: 'ace04997-f6bd-4329-8b0e-ad888c934f9c',
+  'martial arts': '799c43e2-50d4-4941-9dd8-e6c6a3d8d648',
+  mystery: 'ee963cdd-085e-450f-9694-1a3b1a8f9d0c',
+  psychological: '3b60b75c-a2d7-4860-ab56-05f391bb889c',
+  reincarnation: '0bc90acb-ccc1-44ca-a34a-b9f3a73259d0',
+  romance: '423e2eae-a7a2-4a8b-ac03-a8351462d71d',
+  'sci-fi': '256c8bd9-4904-4360-bf4f-508a76d67183',
+  'slice of life': 'e5301a23-ebd9-49dd-a0cb-2add944c7fe9',
+  supernatural: 'eabc5b4c-6aff-42f3-b657-3e90cbd00b75',
+  thriller: '07251805-a27e-4d59-b488-f0bfbec15168',
+  tragedy: 'f8f62932-27da-44e9-7073-110b7d8ee12f',
+  historical: '33771934-028e-4cb3-8744-691e866a923e',
+  monsters: '36fd93ea-e8b8-445e-b836-358f02b3d33d',
+  magic: 'a1f53773-c69a-4ce8-9bf7-4d3e145f68a4',
+};
+
 // Search titles on MangaDex
 export async function searchMangaDex(
   query: string,
-  limit = 24
-): Promise<MangaDexSearchResult[]> {
+  genre?: string,
+  page = 1,
+  limit = 32
+): Promise<{ results: MangaDexSearchResult[]; hasNextPage: boolean; currentPage: number }> {
   try {
     const url = new URL(`${MANGADEX_API_BASE}/manga`);
     url.searchParams.set('limit', limit.toString());
+    const offset = (page - 1) * limit;
+    url.searchParams.set('offset', offset.toString());
     // Include cover art AND author/artist relationships
     url.searchParams.append('includes[]', 'cover_art');
     url.searchParams.append('includes[]', 'author');
@@ -35,6 +62,13 @@ export async function searchMangaDex(
     url.searchParams.append('contentRating[]', 'safe');
     url.searchParams.append('contentRating[]', 'suggestive');
     url.searchParams.append('contentRating[]', 'erotica');
+
+    if (genre && typeof genre === 'string' && genre.toUpperCase() !== 'ALL') {
+      const tagId = MANGADEX_GENRE_TAG_MAP[genre.toLowerCase().trim()];
+      if (tagId) {
+        url.searchParams.append('includedTags[]', tagId);
+      }
+    }
 
     if (query.trim()) {
       url.searchParams.set('title', query.trim());
@@ -49,7 +83,7 @@ export async function searchMangaDex(
     const json = await res.json();
     const data = json.data || [];
 
-    return data.map((manga: any) => {
+    const results = data.map((manga: any) => {
       const attrs = manga.attributes || {};
 
       // Title: prefer Spanish > English > romanized Japanese > any available
@@ -121,9 +155,15 @@ export async function searchMangaDex(
         hasReadableChapters,
       };
     });
+
+    return {
+      results,
+      hasNextPage: results.length === limit,
+      currentPage: page,
+    };
   } catch (err) {
     console.error('Failed to search MangaDex:', err);
-    return [];
+    return { results: [], hasNextPage: false, currentPage: page };
   }
 }
 

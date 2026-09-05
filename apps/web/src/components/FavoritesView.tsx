@@ -9,6 +9,8 @@ import {
   faCompass,
   faArrowRight,
   faMagnifyingGlass,
+  faLock,
+  faUser,
 } from '@fortawesome/free-solid-svg-icons';
 
 interface FavoritesViewProps {
@@ -17,6 +19,7 @@ interface FavoritesViewProps {
   onSelectSeries: (slug: string) => void;
   onSelectChapter?: (slug: string, chapterNumber: number, chapterId: string) => void;
   onGoExplore: () => void;
+  onOpenAuth?: () => void;
 }
 
 function timeAgo(dateStr?: string): string {
@@ -45,6 +48,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
   onSelectSeries,
   onSelectChapter,
   onGoExplore,
+  onOpenAuth,
 }) => {
   const { token, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,27 +124,32 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
   const displayedFavorites = useMemo(() => {
     let list = [...favoriteSeriesList];
 
+    // Status filter
     if (selectedStatus !== 'ALL') {
       list = list.filter((s) => s.status === selectedStatus);
     }
 
+    // Genre filter
     if (selectedGenre !== 'ALL') {
       list = list.filter((s) => s.genres.includes(selectedGenre));
     }
 
+    // Search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       list = list.filter(
         (s) =>
           s.title.toLowerCase().includes(q) ||
           s.author.toLowerCase().includes(q) ||
-          s.genres.some((g) => g.toLowerCase().includes(q))
+          s.description.toLowerCase().includes(q)
       );
     }
 
+    // Sorting
     list.sort((a, b) => {
       if (sortBy === 'chapters') return b.chapterCount - a.chapterCount;
       if (sortBy === 'title') return a.title.localeCompare(b.title);
+      // Default: latest update
       const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
       const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
       return timeB - timeA;
@@ -161,6 +170,60 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
             />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  // Locked State for Unauthenticated (Guest) Users
+  if (!user) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 md:py-16">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 16 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="glass rounded-3xl p-8 sm:p-14 border border-white/15 text-center max-w-xl mx-auto shadow-2xl bg-[#0F1015]/90 backdrop-blur-2xl"
+        >
+          <div className="w-20 h-20 rounded-3xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center text-3xl mx-auto mb-6 text-amber-400 shadow-[0_0_40px_rgba(245,158,11,0.25)]">
+            <FontAwesomeIcon icon={faLock} />
+          </div>
+
+          <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-black uppercase px-3 py-1 rounded-full inline-flex items-center gap-1.5 shadow-sm mb-3">
+            <FontAwesomeIcon icon={faStar} className="text-amber-400" />
+            <span>Members Only Feature</span>
+          </span>
+
+          <h1 className="text-2xl sm:text-3xl font-black text-white mb-3 tracking-tight">
+            Sign In to View Favorites
+          </h1>
+
+          <p className="text-gray-400 text-sm sm:text-base leading-relaxed mb-8 max-w-md mx-auto">
+            Create a free account or sign in to bookmark your favorite comics, track new chapter updates, and sync your reading across all your devices.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            {onOpenAuth && (
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={onOpenAuth}
+                className="w-full sm:w-auto bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-bold px-7 py-3.5 rounded-2xl shadow-glow text-sm flex items-center justify-center gap-2 transition-all"
+              >
+                <FontAwesomeIcon icon={faUser} />
+                <span>Sign In / Register</span>
+              </motion.button>
+            )}
+
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={onGoExplore}
+              className="w-full sm:w-auto bg-white/10 hover:bg-white/15 text-white font-bold px-6 py-3.5 rounded-2xl border border-white/15 text-sm flex items-center justify-center gap-2 transition-all"
+            >
+              <FontAwesomeIcon icon={faCompass} />
+              <span>Explore Catalog</span>
+            </motion.button>
+          </div>
+        </motion.div>
       </div>
     );
   }

@@ -9,7 +9,10 @@ import {
   faCloudArrowUp,
   faRightFromBracket,
   faUser,
+  faMagnifyingGlass,
+  faLock,
 } from '@fortawesome/free-solid-svg-icons';
+import { NotificationBell } from './NotificationBell';
 
 interface HealthState {
   status: string;
@@ -26,6 +29,8 @@ interface NavbarProps {
   onGoFavorites: () => void;
   onOpenImporter: () => void;
   onOpenAuth: () => void;
+  onOpenSearch?: () => void;
+  onSelectChapter?: (slug: string, chapterNumber: number, chapterId: string) => void;
   activeView: string;
 }
 
@@ -36,6 +41,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onGoFavorites,
   onOpenImporter,
   onOpenAuth,
+  onOpenSearch,
+  onSelectChapter,
   activeView,
 }) => {
   const { user, isAdmin, logout } = useAuth();
@@ -62,9 +69,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleGoHome = () => { setMobileMenuOpen(false); onGoHome(); };
   const handleGoLibrary = () => { setMobileMenuOpen(false); onGoLibrary(); };
-  const handleGoFavorites = () => { setMobileMenuOpen(false); onGoFavorites(); };
+  const handleGoFavorites = () => {
+    setMobileMenuOpen(false);
+    if (!user) {
+      onOpenAuth();
+    } else {
+      onGoFavorites();
+    }
+  };
   const handleOpenImporter = () => { setMobileMenuOpen(false); onOpenImporter(); };
   const handleOpenAuth = () => { setMobileMenuOpen(false); onOpenAuth(); };
+  const handleOpenSearch = () => { setMobileMenuOpen(false); onOpenSearch?.(); };
 
   return (
     <header className="sticky top-0 z-50 glass border-b border-white/10 backdrop-blur-xl bg-background/80">
@@ -72,18 +87,36 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto px-3 h-12 flex items-center justify-between gap-2">
 
         {/* Brand Logo — compact on tiny screens */}
-        <motion.div
-          onClick={handleGoHome}
-          whileTap={{ scale: 0.96 }}
-          className="cursor-pointer flex items-center gap-2 shrink-0 min-w-0"
-        >
-          <div className="w-7 h-7 rounded-full overflow-hidden border border-rose-500/40 shrink-0 shadow-glow">
-            <img src="/favicon.png" alt="Panelium" className="w-full h-full object-cover" />
-          </div>
-          <span className="text-sm font-black tracking-tight leading-none whitespace-nowrap">
-            Panelium<span className="text-accent">Scan</span>
-          </span>
-        </motion.div>
+        <div className="flex items-center gap-3">
+          <motion.div
+            onClick={handleGoHome}
+            whileTap={{ scale: 0.96 }}
+            className="cursor-pointer flex items-center gap-2 shrink-0 min-w-0"
+          >
+            <div className="w-7 h-7 rounded-full overflow-hidden border border-rose-500/40 shrink-0 shadow-glow">
+              <img src="/favicon.png" alt="Panelium" className="w-full h-full object-cover" />
+            </div>
+            <span className="text-sm font-black tracking-tight leading-none whitespace-nowrap">
+              Panelium<span className="text-accent">Scan</span>
+            </span>
+          </motion.div>
+
+          {/* Quick Search Trigger (Desktop/Tablet) */}
+          {onOpenSearch && (
+            <button
+              onClick={handleOpenSearch}
+              className="hidden sm:flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-gray-400 hover:text-white px-3 py-1.5 rounded-xl text-xs font-medium transition-all shadow-inner group ml-2"
+              title="Search Manhwa (Ctrl+K)"
+            >
+              <FontAwesomeIcon icon={faMagnifyingGlass} className="text-rose-500 group-hover:scale-110 transition-transform" />
+              <span className="hidden lg:inline text-gray-300">Search manhwa...</span>
+              <span className="lg:hidden text-gray-300">Search</span>
+              <kbd className="text-[10px] bg-white/10 border border-white/10 text-gray-400 font-mono px-1.5 py-0.5 rounded ml-1">
+                Ctrl K
+              </kbd>
+            </button>
+          )}
+        </div>
 
         {/* Desktop nav (md+) */}
         <div className="hidden md:flex items-center gap-2">
@@ -120,9 +153,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             className={`px-3.5 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
               activeView === 'favorites' ? 'bg-accent text-white shadow-glow' : 'text-gray-300 hover:bg-white/5 hover:text-white'
             }`}
+            title={!user ? 'Sign in to access favorites' : 'My Favorites'}
           >
             <FontAwesomeIcon icon={faStar} className="text-xs text-amber-400" />
-            Favorites
+            <span>Favorites</span>
+            {!user && (
+              <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
+                <FontAwesomeIcon icon={faLock} className="text-[9px]" />
+              </span>
+            )}
           </button>
 
           {isAdmin && (
@@ -137,6 +176,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
+
+          {onSelectChapter && (
+            <NotificationBell
+              onSelectChapter={onSelectChapter}
+              onGoFavorites={handleGoFavorites}
+              onOpenAuth={onOpenAuth}
+            />
+          )}
 
           {user ? (
             <div className="relative" ref={dropdownRef}>
@@ -198,6 +245,24 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Mobile right side */}
         <div className="flex md:hidden items-center gap-1.5 shrink-0">
+          {onOpenSearch && (
+            <button
+              onClick={handleOpenSearch}
+              className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-rose-400 hover:text-white flex items-center justify-center text-xs transition-all"
+              aria-label="Search"
+            >
+              <FontAwesomeIcon icon={faMagnifyingGlass} />
+            </button>
+          )}
+
+          {onSelectChapter && (
+            <NotificationBell
+              onSelectChapter={onSelectChapter}
+              onGoFavorites={handleGoFavorites}
+              onOpenAuth={onOpenAuth}
+            />
+          )}
+
           {user ? (
             <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-rose-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
               {user.username.charAt(0).toUpperCase()}
@@ -276,6 +341,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               <div className="h-px bg-white/5 my-1" />
 
+              {onOpenSearch && (
+                <button
+                  onClick={handleOpenSearch}
+                  className="w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2.5 text-gray-200 hover:bg-white/5"
+                >
+                  <FontAwesomeIcon icon={faMagnifyingGlass} className="w-4 text-rose-500" />
+                  Search Comics
+                </button>
+              )}
+
               <button
                 onClick={handleGoHome}
                 className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2.5 ${
@@ -298,12 +373,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               <button
                 onClick={handleGoFavorites}
-                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2.5 ${
-                  activeView === 'favorites' ? 'bg-accent text-white' : 'text-gray-200'
+                className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-between ${
+                  activeView === 'favorites' ? 'bg-accent text-white' : 'text-gray-200 hover:bg-white/5'
                 }`}
               >
-                <FontAwesomeIcon icon={faStar} className="w-4 text-amber-400" />
-                Favorites
+                <div className="flex items-center gap-2.5">
+                  <FontAwesomeIcon icon={faStar} className="w-4 text-amber-400" />
+                  <span>Favorites</span>
+                </div>
+                {!user && (
+                  <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md flex items-center gap-1">
+                    <FontAwesomeIcon icon={faLock} className="text-[9px]" />
+                    Sign In
+                  </span>
+                )}
               </button>
 
               {isAdmin && (
