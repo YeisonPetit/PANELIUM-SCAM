@@ -215,6 +215,218 @@ export async function syncAllSeries(): Promise<void> {
 }
 
 /**
+ * Audita una serie específica comparando sus capítulos locales con la fuente remota.
+ */
+export async function auditSingleSeries(seriesId: string): Promise<{
+  seriesId: string;
+  title: string;
+  slug: string;
+  cover: string;
+  sourceUrl: string | null;
+  localChapterCount: number;
+  latestLocalChapter: number;
+  remoteChapterCount: number;
+  latestRemoteChapter: number;
+  isOutdated: boolean;
+  missingChaptersCount: number;
+  error?: string;
+}> {
+  const series = await prisma.series.findUnique({
+    where: { id: seriesId },
+    include: {
+      chapters: {
+        select: { id: true, number: true },
+        orderBy: { number: 'desc' },
+      },
+    },
+  });
+
+  if (!series) {
+    throw new Error('Series not found');
+  }
+
+  const localChapterCount = series.chapters.length;
+  const latestLocalChapter = series.chapters.length > 0 ? series.chapters[0].number : 0;
+
+  let weebId: string | null = null;
+  if (series.sourceUrl && series.sourceUrl.startsWith('weebcentral:')) {
+    weebId = series.sourceUrl.replace('weebcentral:', '').trim();
+  }
+
+  if (!weebId) {
+    weebId = await smartSearchWeebCentral(series.title);
+    if (weebId) {
+      await prisma.series.update({
+        where: { id: series.id },
+        data: { sourceUrl: `weebcentral:${weebId}` },
+      });
+    }
+  }
+
+  if (!weebId) {
+    return {
+      seriesId: series.id,
+      title: series.title,
+      slug: series.slug,
+      cover: series.cover,
+      sourceUrl: null,
+      localChapterCount,
+      latestLocalChapter,
+      remoteChapterCount: localChapterCount,
+      latestRemoteChapter: latestLocalChapter,
+      isOutdated: false,
+      missingChaptersCount: 0,
+      error: 'Unlinked (No match found on provider)',
+    };
+  }
+
+  try {
+    const { MANGA } = await import('@consumet/extensions');
+    const weeb = new MANGA.WeebCentral();
+    const details = await weeb.fetchMangaInfo(weebId);
+
+    const remoteChapters = details?.chapters || [];
+    const remoteChapterCount = remoteChapters.length;
+
+    // Calcular el número más alto disponible en la fuente remota
+    let latestRemoteChapter = latestLocalChapter;
+    if (remoteChapters.length > 0) {
+      for (const ch of remoteChapters) {
+        const titleMatch = (ch.title || '').match(/(?:chapter|ch\.?)\s*(\d+(\.\d+)?)/i);
+        const num = titleMatch ? parseFloat(titleMatch[1]) : (typeof ch.number === 'number' ? ch.number : 0);
+        if (num > latestRemoteChapter) {
+          latestRemoteChapter = num;
+        }
+      }
+    }
+
+    const missingChaptersCount = Math.max(0, remoteChapterCount - localChapterCount);
+    const isOutdated = missingChaptersCount > 0 || latestRemoteChapter > latestLocalChapter;
+
+    return {
+      seriesId: series.id,
+      title: series.title,
+      slug: series.slug,
+      cover: series.cover,
+      sourceUrl: `weebcentral:${weebId}`,
+      localChapterCount,
+      latestLocalChapter,
+      remoteChapterCount,
+      latestRemoteChapter,
+      isOutdated,
+      missingChaptersCount,
+    };
+  } catch (err: any) {
+    return {
+      seriesId: series.id,
+      title: series.title,
+      slug: series.slug,
+      cover: series.cover,
+      sourceUrl: `weebcentral:${weebId}`,
+      localChapterCount,
+      latestLocalChapter,
+      remoteChapterCount: localChapterCount,
+      latestRemoteChapter: latestLocalChapter,
+      isOutdated: false,
+      missingChaptersCount: 0,
+      error: err.message || 'Provider fetch failed',
+    };
+  }
+}
+
+/**
+ * Audita todas las series del catálogo secuencialmente
+ */
+export async function auditAllSeries(): Promise<{
+  totalSeries: number;
+  totalUpToDate: number;
+  totalOutdated: number;
+  totalUnlinked: number;
+  results: Array<Awaited<ReturnType<typeof auditSingleSeries>>>;
+}> {
+  const allSeries = await prisma.series.findMany({
+    select: { id: true },
+    orderBy: { title: 'asc' },
+  });
+
+  const results: Array<Awaited<ReturnType<typeof auditSingleSeries>>> = [];
+  let totalUpToDate = 0;
+  let totalOutdated = 0;
+  let totalUnlinked = 0;
+
+  for (const s of allSeries) {
+    try {
+      const res = await auditSingleSeries(s.id);
+      results.push(res);
+      if (res.error && res.error.includes('Unlinked')) {
+        totalUnlinked++;
+      } else if (res.isOutdated) {
+        totalOutdated++;
+      } else {
+        totalUpToDate++;
+      }
+      await sleep(400); // 400ms entre peticiones de auditoría
+    } catch {
+      // ignore
+    }
+  }
+
+  return {
+    totalSeries: allSeries.length,
+    totalUpToDate,
+    totalOutdated,
+    totalUnlinked,
+    results,
+  };
+}
+
+/**
+ * Sincroniza forzosamente una serie específica
+ */
+export async function forceSyncSeries(seriesId: string): Promise<{
+  success: boolean;
+  seriesTitle: string;
+  newChaptersCount: number;
+  totalChapters: number;
+}> {
+  const series = await prisma.series.findUnique({
+    where: { id: seriesId },
+    select: { id: true, title: true, sourceUrl: true },
+  });
+
+  if (!series) {
+    throw new Error('Series not found');
+  }
+
+  let weebId: string | null = null;
+  if (series.sourceUrl && series.sourceUrl.startsWith('weebcentral:')) {
+    weebId = series.sourceUrl.replace('weebcentral:', '').trim();
+  }
+
+  if (!weebId) {
+    weebId = await smartSearchWeebCentral(series.title);
+    if (weebId) {
+      await prisma.series.update({
+        where: { id: series.id },
+        data: { sourceUrl: `weebcentral:${weebId}` },
+      });
+    }
+  }
+
+  if (!weebId) {
+    throw new Error(`Could not link "${series.title}" with WeebCentral provider.`);
+  }
+
+  const result = await importWeebCentralSeries(weebId, series.id);
+  return {
+    success: true,
+    seriesTitle: series.title,
+    newChaptersCount: (result as any).newChaptersCount || 0,
+    totalChapters: result.chapterCount || 0,
+  };
+}
+
+/**
  * Inicializa el worker en segundo plano con inicio diferido.
  */
 export function startBackgroundSync(): void {
@@ -226,3 +438,4 @@ export function startBackgroundSync(): void {
     runContinuousCycle().catch((err) => console.error('[Background Sync] Error en inicio del worker:', err));
   }, 5000);
 }
+

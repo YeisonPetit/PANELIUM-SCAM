@@ -4,7 +4,12 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { prisma } from './lib/prisma';
 import { checkRedisHealth, redis } from './lib/redis';
-import { startBackgroundSync } from './lib/sync';
+import {
+  startBackgroundSync,
+  auditSingleSeries,
+  auditAllSeries,
+  forceSyncSeries,
+} from './lib/sync';
 import { getUserNotifications } from './lib/notifications';
 import { generateSeriesOgImage, generateChapterOgImage } from './lib/ogGenerator';
 import {
@@ -1622,6 +1627,95 @@ app.get('/sitemap.xml', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error generating sitemap:', error);
     return res.status(500).send('Error generating sitemap');
+  }
+});
+
+// ─── Sync Auditor & Manager Endpoints ────────────────────────────────────────
+
+// GET /api/sync/catalog-status — Overview of all series & chapters in database
+app.get('/api/sync/catalog-status', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const series = await prisma.series.findMany({
+      orderBy: { title: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        cover: true,
+        status: true,
+        type: true,
+        sourceUrl: true,
+        createdAt: true,
+        chapters: {
+          select: { id: true, number: true, createdAt: true },
+          orderBy: { number: 'desc' },
+        },
+      },
+    });
+
+    const items = series.map((s) => ({
+      id: s.id,
+      title: s.title,
+      slug: s.slug,
+      cover: s.cover,
+      status: s.status,
+      type: s.type,
+      sourceUrl: s.sourceUrl,
+      localChapterCount: s.chapters.length,
+      latestLocalChapter: s.chapters.length > 0 ? s.chapters[0].number : 0,
+      createdAt: s.createdAt,
+    }));
+
+    return res.json({
+      total: items.length,
+      data: items,
+    });
+  } catch (error) {
+    console.error('Error fetching catalog sync status:', error);
+    return res.status(500).json({ error: 'Error fetching catalog sync status' });
+  }
+});
+
+// POST /api/sync/audit-single — Audit one series against remote provider
+app.post('/api/sync/audit-single', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { seriesId } = req.body;
+    if (!seriesId) {
+      return res.status(400).json({ error: 'seriesId is required' });
+    }
+
+    const result = await auditSingleSeries(seriesId);
+    return res.json(result);
+  } catch (error: any) {
+    console.error('Error auditing single series:', error);
+    return res.status(500).json({ error: error.message || 'Error auditing series' });
+  }
+});
+
+// POST /api/sync/audit-all — Scan and audit all series in database
+app.post('/api/sync/audit-all', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const report = await auditAllSeries();
+    return res.json(report);
+  } catch (error: any) {
+    console.error('Error auditing all series:', error);
+    return res.status(500).json({ error: error.message || 'Error auditing all series' });
+  }
+});
+
+// POST /api/sync/force-sync — Force immediate synchronization of a series
+app.post('/api/sync/force-sync', requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { seriesId } = req.body;
+    if (!seriesId) {
+      return res.status(400).json({ error: 'seriesId is required' });
+    }
+
+    const result = await forceSyncSeries(seriesId);
+    return res.json(result);
+  } catch (error: any) {
+    console.error('Error in force sync:', error);
+    return res.status(500).json({ error: error.message || 'Error executing force sync' });
   }
 });
 

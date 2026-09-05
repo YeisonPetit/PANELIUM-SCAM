@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 
+import { SyncAuditor } from './SyncAuditor';
+
 export interface ImporterItem {
   id: string;
   title: string;
@@ -50,6 +52,7 @@ const POPULAR_GENRES = [
 ];
 
 export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImported }) => {
+  const [dashboardMode, setDashboardMode] = useState<'auditor' | 'importer'>('auditor');
   const [activeSource, setActiveSource] = useState<'weebcentral' | 'mangadex'>('weebcentral');
   const [query, setQuery] = useState<string>('');
   const [selectedGenre, setSelectedGenre] = useState<string>('ALL');
@@ -218,48 +221,78 @@ export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImpo
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
-      {/* Header Banner */}
-      <div className="glass p-8 rounded-3xl mb-10 border border-white/10 relative overflow-hidden shadow-glow">
-        <div className="absolute inset-0 bg-gradient-to-r from-red-600/20 via-accent/20 to-transparent pointer-events-none" />
-        <div className="relative z-10 max-w-4xl">
-          <span className="inline-block bg-accent/20 text-accent border border-accent/30 text-xs font-bold px-3 py-1 rounded-full mb-4">
-            🌐 Live Importer {activeSource === 'weebcentral' ? '(WeebCentral)' : '(MangaDex)'}
-          </span>
-          
-          <h2 className="text-4xl md:text-5xl font-black text-white mb-3 tracking-tight">
-            Import Manhwas & Mangas
-          </h2>
-          <p className="text-gray-300 text-lg leading-relaxed mb-6">
-            {activeSource === 'weebcentral'
-              ? 'Search and import English manhwas and mangas from WeebCentral. Includes popular titles with HD covers and automated updates.'
-              : 'Search and import English translated titles directly from MangaDex. Access their global community library with 1 click.'}
-          </p>
+      {/* Top Main Mode Switcher */}
+      <div className="flex flex-wrap items-center gap-2 mb-8 bg-black/40 p-1.5 rounded-2xl border border-white/10 w-fit">
+        <button
+          type="button"
+          onClick={() => setDashboardMode('auditor')}
+          className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${
+            dashboardMode === 'auditor'
+              ? 'bg-rose-500 text-white shadow-glow'
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <span>📊 Chapter Auditor & Sync Control</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setDashboardMode('importer')}
+          className={`px-5 py-2.5 rounded-xl text-sm font-black transition-all flex items-center gap-2 ${
+            dashboardMode === 'importer'
+              ? 'bg-rose-500 text-white shadow-glow'
+              : 'text-gray-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <span>📥 Search & Import New Series</span>
+        </button>
+      </div>
 
-          {/* Tab Selector */}
-          <div className="flex gap-2 mb-6 bg-black/40 p-1.5 rounded-2xl border border-white/10 w-fit">
-            <button
-              type="button"
-              onClick={() => setActiveSource('weebcentral')}
-              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
-                activeSource === 'weebcentral'
-                  ? 'bg-accent text-white shadow-glow'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              🌐 WeebCentral (English)
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveSource('mangadex')}
-              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
-                activeSource === 'mangadex'
-                  ? 'bg-accent text-white shadow-glow'
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              🎯 MangaDex
-            </button>
-          </div>
+      {dashboardMode === 'auditor' ? (
+        <SyncAuditor onOpenSeries={onSeriesImported} />
+      ) : (
+        <>
+          {/* Header Banner */}
+          <div className="glass p-8 rounded-3xl mb-10 border border-white/10 relative overflow-hidden shadow-glow">
+            <div className="absolute inset-0 bg-gradient-to-r from-red-600/20 via-accent/20 to-transparent pointer-events-none" />
+            <div className="relative z-10 max-w-4xl">
+              <span className="inline-block bg-accent/20 text-accent border border-accent/30 text-xs font-bold px-3 py-1 rounded-full mb-4">
+                🌐 Live Importer {activeSource === 'weebcentral' ? '(WeebCentral)' : '(MangaDex)'}
+              </span>
+              
+              <h2 className="text-4xl md:text-5xl font-black text-white mb-3 tracking-tight">
+                Import Manhwas & Mangas
+              </h2>
+              <p className="text-gray-300 text-lg leading-relaxed mb-6">
+                {activeSource === 'weebcentral'
+                  ? 'Search and import English manhwas and mangas from WeebCentral. Includes popular titles with HD covers and automated updates.'
+                  : 'Search and import English translated titles directly from MangaDex. Access their global community library with 1 click.'}
+              </p>
+
+              {/* Tab Selector */}
+              <div className="flex gap-2 mb-6 bg-black/40 p-1.5 rounded-2xl border border-white/10 w-fit">
+                <button
+                  type="button"
+                  onClick={() => setActiveSource('weebcentral')}
+                  className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+                    activeSource === 'weebcentral'
+                      ? 'bg-accent text-white shadow-glow'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  🌐 WeebCentral (English)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSource('mangadex')}
+                  className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
+                    activeSource === 'mangadex'
+                      ? 'bg-accent text-white shadow-glow'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  🎯 MangaDex
+                </button>
+              </div>
 
           {/* Search Bar */}
           <form onSubmit={handleSearchSubmit} className="flex flex-col sm:flex-row gap-3">
@@ -502,6 +535,8 @@ export const MangaDexImporter: React.FC<MangaDexImporterProps> = ({ onSeriesImpo
             )}
           </button>
         </div>
+      )}
+      </>
       )}
     </div>
   );
