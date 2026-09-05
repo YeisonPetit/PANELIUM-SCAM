@@ -1,5 +1,5 @@
 FROM node:20-alpine AS base
-RUN apk add --no-cache openssl ca-certificates
+RUN apk add --no-cache openssl ca-certificates fontconfig ttf-dejavu font-noto freetype
 
 FROM base AS builder
 WORKDIR /app
