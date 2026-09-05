@@ -1,91 +1,160 @@
 import { PrismaClient } from '@prisma/client';
-import { importWeebCentralSeries } from './weebcentral';
+import { importWeebCentralSeries, searchWeebCentral } from './weebcentral';
 
 const prisma = new PrismaClient();
 
-// In minutes
-const SYNC_INTERVAL = 30;
+// Configuración de lotes y reposo inteligente
+const BATCH_SIZE = 20;                     // 20 manhwas por lote
+const BATCH_INTERVAL_MS = 2 * 60 * 1000;   // 2 minutos entre cada lote durante la sincronización
+const REST_AFTER_FULL_CYCLE_MS = 60 * 60 * 1000; // 60 minutos (1 hora) de reposo TOTAL tras revisar el 100%
+const DELAY_BETWEEN_SERIES_MS = 400;       // 400ms de pausa entre manhwas para no saturar WeebCentral
 
-export async function syncAllSeries() {
-  console.log('[Background Sync] Starting update check for all series...');
+let isSyncRunning = false;
+let currentCursor = 0;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Sincroniza un único manhwa con WeebCentral.
+ * Si no tiene el ID guardado, lo busca por título, lo enlaza en la BD y sincroniza.
+ */
+async function syncSingleSeries(series: { id: string; title: string; sourceUrl: string | null }): Promise<void> {
+  let weebId: string | null = null;
+
+  if (series.sourceUrl && series.sourceUrl.startsWith('weebcentral:')) {
+    weebId = series.sourceUrl.replace('weebcentral:', '').trim();
+  }
+
+  // Si aún no tiene el ID de WeebCentral, buscarlo por título
+  if (!weebId) {
+    try {
+      console.log(`[Background Sync] Buscando en WeebCentral "${series.title}"...`);
+      const searchResults = await searchWeebCentral(series.title);
+      if (searchResults && searchResults.length > 0) {
+        weebId = searchResults[0].id;
+        // Guardar el ID en la BD para todas las futuras sincronizaciones
+        await prisma.series.update({
+          where: { id: series.id },
+          data: { sourceUrl: `weebcentral:${weebId}` },
+        });
+        console.log(`[Background Sync] Enlazado "${series.title}" con WeebCentral ID: ${weebId}`);
+      } else {
+        console.warn(`[Background Sync] No se encontró coincidencia en WeebCentral para "${series.title}".`);
+        return;
+      }
+    } catch (err) {
+      console.error(`[Background Sync] Error de búsqueda para "${series.title}":`, err);
+      return;
+    }
+  }
+
+  // Sincronizar capítulos con WeebCentral
   try {
-    // Find series that have a WeebCentral sourceUrl tag
-    const weebSeries = await prisma.series.findMany({
-      where: {
-        sourceUrl: {
-          startsWith: 'weebcentral:'
-        }
-      }
-    });
-
-    // Also find series that DON'T have a sourceUrl yet but have chapters with sourceUrl (the WeebCentral chapter ID)
-    // We can infer the series ID from the chapter's sourceUrl by querying WeebCentral
-    const noSourceSeries = await prisma.series.findMany({
-      where: { sourceUrl: null },
-      include: {
-        chapters: {
-          where: { sourceUrl: { not: null } },
-          take: 1
-        }
-      }
-    });
-
-    console.log(`[Background Sync] Found ${weebSeries.length} tagged WeebCentral series + ${noSourceSeries.length} untagged series to check.`);
-
-    // Sync tagged series
-    for (const series of weebSeries) {
-      const weebId = series.sourceUrl!.replace('weebcentral:', '');
-      console.log(`[Background Sync] Syncing "${series.title}" (ID: ${weebId})...`);
-      try {
-        const result = await importWeebCentralSeries(weebId);
-        console.log(`[Background Sync] Synced "${series.title}". Chapters: ${result.chapterCount}`);
-      } catch (err) {
-        console.error(`[Background Sync] Failed to sync "${series.title}":`, err);
-      }
-    }
-
-    // For untagged series with chapters, try to get the WeebCentral ID from the chapter's sourceUrl
-    for (const series of noSourceSeries) {
-      if (series.chapters.length === 0) continue;
-      const chap = series.chapters[0];
-      if (!chap.sourceUrl) continue;
-
-      // The chapter's sourceUrl IS the WeebCentral chapter ID. We can use it to fetch chapter pages,
-      // but to sync the series we need the series ID. 
-      // Use the existing import by querying WeebCentral search.
-      console.log(`[Background Sync] Attempting to identify "${series.title}" via WeebCentral search...`);
-      try {
-        const { searchWeebCentral } = await import('./weebcentral');
-        const results = await searchWeebCentral(series.title);
-        if (results.length > 0) {
-          const weebId = results[0].id;
-          const result = await importWeebCentralSeries(weebId);
-          // Store the WeebCentral ID for future syncs
-          await prisma.series.update({
-            where: { id: series.id },
-            data: { sourceUrl: `weebcentral:${weebId}` }
-          });
-          console.log(`[Background Sync] Identified and tagged "${series.title}" as WeebCentral ID: ${weebId}. Chapters: ${result.chapterCount}`);
-        }
-      } catch (err) {
-        console.error(`[Background Sync] Failed to identify "${series.title}":`, err);
-      }
-    }
-
-    console.log('[Background Sync] Completed synchronization checks successfully.');
-  } catch (error) {
-    console.error('[Background Sync] Error during background synchronization loop:', error);
+    const result = await importWeebCentralSeries(weebId);
+    const addedText = (result as any).newChaptersCount > 0 
+      ? ` (+${(result as any).newChaptersCount} capítulos NUEVOS)`
+      : '';
+    console.log(`[Background Sync] Sincronizado "${series.title}". Total: ${result.chapterCount} caps${addedText}`);
+  } catch (err) {
+    console.error(`[Background Sync] Falló sincronización de "${series.title}" (ID: ${weebId}):`, err);
   }
 }
 
-export function startBackgroundSync() {
-  // Run once immediately on startup
-  setTimeout(() => {
-    syncAllSeries().catch(err => console.error('[Background Sync] Initial run error:', err));
-  }, 10000); // 10 second delay on startup to let DB/Server warm up
+/**
+ * Ejecuta un lote y programa el siguiente paso (siguiente lote o reposo prolongado).
+ */
+async function runBatchCycle(): Promise<void> {
+  if (isSyncRunning) {
+    console.log('[Background Sync] Lote previo aún en ejecución, esperando...');
+    return;
+  }
 
-  // Schedule periodic checks
-  setInterval(() => {
-    syncAllSeries().catch(err => console.error('[Background Sync] Scheduler check error:', err));
-  }, SYNC_INTERVAL * 60 * 1000);
+  isSyncRunning = true;
+  let nextDelay = BATCH_INTERVAL_MS;
+
+  try {
+    const totalCount = await prisma.series.count();
+    if (totalCount === 0) {
+      isSyncRunning = false;
+      setTimeout(runBatchCycle, REST_AFTER_FULL_CYCLE_MS);
+      return;
+    }
+
+    if (currentCursor >= totalCount) {
+      currentCursor = 0;
+    }
+
+    const batch = await prisma.series.findMany({
+      skip: currentCursor,
+      take: BATCH_SIZE,
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, title: true, sourceUrl: true },
+    });
+
+    const startIdx = currentCursor + 1;
+    const endIdx = currentCursor + batch.length;
+    console.log(`[Background Sync] ─── Procesando Lote: ${startIdx}-${endIdx} de ${totalCount} manhwas ───`);
+
+    for (const series of batch) {
+      await syncSingleSeries(series);
+      await sleep(DELAY_BETWEEN_SERIES_MS);
+    }
+
+    currentCursor += batch.length;
+
+    // ¿Llegamos al final del catálogo completo?
+    if (currentCursor >= totalCount) {
+      const restMinutes = Math.round(REST_AFTER_FULL_CYCLE_MS / 60000);
+      console.log(`[Background Sync] 🏁 ¡100% COMPLETADO! Se evaluaron todas las ${totalCount} series.`);
+      console.log(`[Background Sync] 💤 Entrando en REPOSO TOTAL durante ${restMinutes} minutos para cuidar recursos del servidor y la API...`);
+      currentCursor = 0;
+      nextDelay = REST_AFTER_FULL_CYCLE_MS; // Pausa larga (ej. 1 hora)
+    } else {
+      nextDelay = BATCH_INTERVAL_MS; // Pausa corta de 2 minutos para el siguiente lote
+    }
+  } catch (error) {
+    console.error('[Background Sync] Error durante la ejecución del lote:', error);
+    nextDelay = BATCH_INTERVAL_MS;
+  } finally {
+    isSyncRunning = false;
+    // Programar la siguiente ejecución de forma segura y dinámica
+    setTimeout(() => {
+      runBatchCycle().catch((err) => console.error('[Background Sync] Error en ciclo programado:', err));
+    }, nextDelay);
+  }
+}
+
+/**
+ * Sincronización manual bajo demanda de todas las series (para panel de administración)
+ */
+export async function syncAllSeries(): Promise<void> {
+  console.log('[Background Sync] Sincronización manual total iniciada...');
+  const allSeries = await prisma.series.findMany({
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, title: true, sourceUrl: true },
+  });
+
+  console.log(`[Background Sync] Sincronizando ${allSeries.length} series...`);
+  for (let i = 0; i < allSeries.length; i++) {
+    const s = allSeries[i];
+    console.log(`[Background Sync] [${i + 1}/${allSeries.length}] Sincronizando "${s.title}"...`);
+    await syncSingleSeries(s);
+    await sleep(DELAY_BETWEEN_SERIES_MS);
+  }
+  console.log('[Background Sync] Sincronización manual total finalizada.');
+}
+
+/**
+ * Inicializa el worker en segundo plano con inicio diferido.
+ */
+export function startBackgroundSync(): void {
+  const restMins = Math.round(REST_AFTER_FULL_CYCLE_MS / 60000);
+  console.log(`[Background Sync] Sistema iniciado. Lotes de ${BATCH_SIZE} cada ${BATCH_INTERVAL_MS / 60000} min -> Reposo de ${restMins} min al terminar el 100%.`);
+
+  // Iniciar el primer lote 5 segundos tras encender el servidor
+  setTimeout(() => {
+    runBatchCycle().catch((err) => console.error('[Background Sync] Error en inicio del worker:', err));
+  }, 5000);
 }

@@ -103,19 +103,20 @@ export async function importWeebCentralSeries(seriesId: string) {
     }
 
     // 2. Create chapters in DB
+    let newChaptersCount = 0;
     if (details.chapters && series) {
-      // Reverse to get chronological order if needed, but we rely on number anyway
+      const existingChapters = await prisma.chapter.findMany({
+        where: { seriesId: series.id },
+        select: { number: true },
+      });
+      const existingNumbers = new Set(existingChapters.map((c) => c.number));
+
       for (const chap of details.chapters) {
-        // WeebCentral chapters usually have a title like "Chapter 200" or "Episode 325".
         const chapTitle = getString(chap.title);
         const numMatch = chapTitle.match(/(?:Chapter|Episode|Ch\.?)?\s*(\d+(\.\d+)?)/i);
         const number = numMatch ? parseFloat(numMatch[1]) : 0;
 
-        let chapterRecord = await prisma.chapter.findFirst({
-          where: { seriesId: series.id, number },
-        });
-
-        if (!chapterRecord) {
+        if (!existingNumbers.has(number)) {
           await prisma.chapter.create({
             data: {
               seriesId: series.id,
@@ -124,14 +125,24 @@ export async function importWeebCentralSeries(seriesId: string) {
               sourceUrl: chap.id, // Store the WeebCentral chapter ID for lazy loading
             },
           });
+          existingNumbers.add(number);
+          newChaptersCount++;
         }
       }
     }
 
-    // Invalidate Redis cache
-    await redis.del('api:series:all');
+    // Invalidate Redis cache if new chapters were added or cache exists
+    try {
+      const keys = await redis.keys('api:series:*');
+      if (keys && keys.length > 0) {
+        await redis.del(...keys);
+      }
+      await redis.del('api:series:all');
+    } catch (cacheErr) {
+      // Redis optional cache clear fallback
+    }
 
-    return { ...series, chapterCount: details.chapters?.length || 0 };
+    return { ...series, chapterCount: details.chapters?.length || 0, newChaptersCount };
   } catch (err) {
     console.error('Error importing WeebCentral series:', err);
     throw err;

@@ -719,12 +719,12 @@ app.get('/api/series/:slug', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/chapters/latest - Get recently added chapters
+// GET /api/chapters/latest - Get recently added chapters (1 distinct chapter per manhwa)
 app.get('/api/chapters/latest', async (req: Request, res: Response) => {
   try {
-    const latest = await prisma.chapter.findMany({
+    const recentChapters = await prisma.chapter.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 12,
+      take: 80,
       include: {
         series: {
           select: {
@@ -735,6 +735,17 @@ app.get('/api/chapters/latest', async (req: Request, res: Response) => {
         },
       },
     });
+
+    const seenSeries = new Set<string>();
+    const latest: typeof recentChapters = [];
+    for (const chap of recentChapters) {
+      if (!seenSeries.has(chap.seriesId)) {
+        seenSeries.add(chap.seriesId);
+        latest.push(chap);
+        if (latest.length >= 12) break;
+      }
+    }
+
     return res.json(latest);
   } catch (error) {
     console.error('Error fetching latest chapters:', error);
